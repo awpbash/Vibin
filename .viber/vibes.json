@@ -1,0 +1,120 @@
+{
+  "lisbon-jazz": {
+    "id": "lisbon-jazz",
+    "source": {
+      "kind": "youtube",
+      "url": "https://www.youtube.com/watch?v=lLxK5fEzaAU",
+      "title": "Lisbon jazz bar, vinyl, late night"
+    },
+    "title": "A Lisbon Jazz Bar, After Eleven",
+    "oneLiner": "Oxblood velvet and the warm hiss of vinyl. A trumpet that knows it is being listened to.",
+    "palette": [
+      {
+        "name": "oxblood velvet",
+        "hex": "#7e2a2a"
+      },
+      {
+        "name": "candle gold",
+        "hex": "#caa257"
+      },
+      {
+        "name": "deep ink",
+        "hex": "#1f1a18"
+      },
+      {
+        "name": "smoke grey",
+        "hex": "#5e5852"
+      }
+    ],
+    "lighting": "candlelight, table lamps, pools rather than wash",
+    "spatial": "low room, brick, small stage, twenty close seats",
+    "visualMotifs": [
+      "double bass leaning",
+      "wine glasses",
+      "vinyl on turntable",
+      "framed photos",
+      "ashtray on bar"
+    ],
+    "density": 0.7,
+    "energy": 0.55,
+    "timeOfDay": "late-night",
+    "soundscape": [
+      "muted trumpet",
+      "brushed snare",
+      "glass on wood",
+      "Portuguese, low",
+      "needle hiss"
+    ],
+    "musicAnchor": {
+      "genre": "modal jazz, late",
+      "tempoBpm": 78,
+      "key": "D minor",
+      "referenceTrack": "Miles Davis, Blue in Green, live"
+    },
+    "moodTags": [
+      "sultry",
+      "romantic",
+      "slow",
+      "private"
+    ],
+    "createdAt": 1778296755623
+  },
+  "tokyo-coffee-upload-moxs08zj": {
+    "id": "tokyo-coffee-upload-moxs08zj",
+    "source": {
+      "kind": "capture"
+    },
+    "title": "A Lisbon Jazz Bar (you sensed), After Eleven",
+    "oneLiner": "Oxblood velvet and the warm hiss of vinyl. A trumpet that knows it is being listened to.",
+    "palette": [
+      {
+        "name": "oxblood velvet",
+        "hex": "#7e2a2a"
+      },
+      {
+        "name": "candle gold",
+        "hex": "#caa257"
+      },
+      {
+        "name": "deep ink",
+        "hex": "#1f1a18"
+      },
+      {
+        "name": "smoke grey",
+        "hex": "#5e5852"
+      }
+    ],
+    "lighting": "candlelight, table lamps, pools rather than wash",
+    "spatial": "low room, brick, small stage, twenty close seats",
+    "visualMotifs": [
+      "double bass leaning",
+      "wine glasses",
+      "vinyl on turntable",
+      "framed photos",
+      "ashtray on bar"
+    ],
+    "density": 0.7,
+    "energy": 0.55,
+    "timeOfDay": "late-night",
+    "soundscape": [
+      "muted trumpet",
+      "brushed snare",
+      "glass on wood",
+      "Portuguese, low",
+      "needle hiss"
+    ],
+    "musicAnchor": {
+      "genre": "modal jazz, late",
+      "tempoBpm": 78,
+      "key": "D minor",
+      "referenceTrack": "Miles Davis, Blue in Green, live"
+    },
+    "moodTags": [
+      "sultry",
+      "romantic",
+      "slow",
+      "private"
+    ],
+    "createdAt": 1778296755623
+  }
+}

@@ -59,6 +59,15 @@ body {
     radial-gradient(ellipse 90% 60% at 18% 12%, var(--vibe-tint-1) 0%, transparent 60%),
     radial-gradient(ellipse 70% 50% at 88% 92%, var(--vibe-tint-2) 0%, transparent 60%);
   background-attachment: fixed;
+  background-position: 0px 0px, 0px 0px;
+  animation: bg-drift 55s ease-in-out infinite;
+}
+
+/* Background gradient blobs drift slowly — makes the paper feel alive */
+@keyframes bg-drift {
+  0%, 100% { background-position: 0px   0px,   0px   0px;  }
+  33%       { background-position: 28px  -18px, -22px 14px; }
+  66%       { background-position: -14px 22px,  18px  -26px; }
 }
 
 body::before {
@@ -74,6 +83,16 @@ body::before {
   background-position: 0 0, 1px 2px;
   opacity: 0.7;
   mix-blend-mode: multiply;
+  /* Film grain slowly drifts like real analogue texture */
+  animation: grain-drift 18s linear infinite;
+}
+
+@keyframes grain-drift {
+  0%   { background-position: 0px 0px,  1px 2px; }
+  25%  { background-position: -3px 2px, -1px 4px; }
+  50%  { background-position: 2px -1px, 4px 1px;  }
+  75%  { background-position: -1px 3px, 0px 0px;  }
+  100% { background-position: 0px 0px,  1px 2px;  }
 }
 
 body::after {
@@ -662,6 +681,30 @@ a:hover > .wiggle-on-hover {
 .scroll-reveal-stagger.in-view > *:nth-child(3) { transition-delay: 360ms; }
 .scroll-reveal-stagger.in-view > *:nth-child(4) { transition-delay: 500ms; }
 
+/* ---------- Stakeholder carousel — infinite marquee ---------- */
+
+/* Outer: clips overflow, fades edges with a mask */
+.carousel-outer {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 7%, black 93%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, black 7%, black 93%, transparent 100%);
+  padding-bottom: 1.5rem; /* room for card shadow */
+}
+
+/* Inner animated track — rendered twice for seamless loop */
+@keyframes carousel-marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.carousel-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: carousel-marquee 40s linear infinite;
+}
+.carousel-marquee-track:hover {
+  animation-play-state: paused;
+}
+
 /* Recording overlay entrance */
 @keyframes overlay-in {
   from { opacity: 0; }
@@ -722,6 +765,9 @@ a:hover > .wiggle-on-hover {
   }
   .stamp-beacon { animation: none !important; opacity: 0; }
   .bounce-hint  { animation: none !important; }
+  .carousel-marquee-track { animation: none !important; }
+  body          { animation: none !important; }
+  body::before  { animation: none !important; }
 }
 
 ::selection {

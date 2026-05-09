@@ -1,6 +1,13 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { getVibe, getPlacesForVibe } from "@/lib/vibe-store";
-import { VibeStudio } from "@/components/VibeStudio";
+import { ApplyPalette } from "@/components/ApplyPalette";
+import { NearbyMap } from "@/components/NearbyMap";
+import { PaintChips } from "@/components/PaintChips";
+import { PlaceCard } from "@/components/PlaceCard";
+import { Polaroid } from "@/components/Polaroid";
+import { StickyPlayer } from "@/components/StickyPlayer";
+import type { Place, VibeObject } from "@/lib/types";
 
 export default async function VibePage({
   params,
@@ -8,12 +15,30 @@ export default async function VibePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const vibe = await getVibe(id);
+  // Both calls are wrapped: an external API hiccup (Places 403, OpenAI
+  // timeout, disk error) must never crash the route. The page renders
+  // with whatever we successfully fetched; missing places shows the
+  // map's empty-state placeholder.
+  let vibe: VibeObject | undefined;
+  try {
+    vibe = await getVibe(id);
+  } catch (e) {
+    console.warn(
+      `[viber] getVibe failed for ${id}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    vibe = undefined;
+  }
   if (!vibe) return notFound();
-  const places = await getPlacesForVibe(id);
-<<<<<<< HEAD
-  return <VibeStudio vibe={vibe} places={places} />;
-=======
+
+  let places: Place[];
+  try {
+    places = await getPlacesForVibe(id);
+  } catch (e) {
+    console.warn(
+      `[viber] getPlacesForVibe failed for ${id}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    places = [];
+  }
 
   const issue = hashIssue(id);
   const date = formatDate(vibe.createdAt);
@@ -203,6 +228,12 @@ export default async function VibePage({
       </section>
 
       <Footer issue={issue} date={date} />
+
+      <StickyPlayer
+        vibeId={vibe.id}
+        initialMusicUrl={vibe.generatedAssets?.musicUrl ?? null}
+        audioSampleUrl={vibe.source?.audioSampleUrl ?? null}
+      />
     </main>
   );
 }
@@ -243,7 +274,9 @@ function Header({ issue, date }: { issue: number; date: string }) {
             ← back
           </Link>
           <span>·</span>
-          <Link href="/wizard" className="link-underline">field lab</Link>
+          <Link href="/archive" className="link-underline">archive</Link>
+          <span>·</span>
+          <Link href="/lab" className="link-underline">field lab</Link>
         </div>
       </header>
     </div>
@@ -459,5 +492,4 @@ function coverImageFor(vibe: VibeObject, fallback?: string): string {
     fallback ??
     "https://images.unsplash.com/photo-1453614512568-c4024d13c247?auto=format&fit=crop&w=900&q=80"
   );
->>>>>>> 5ca1ea169327df0bd12d1626c4b3402c04ec7c6e
 }

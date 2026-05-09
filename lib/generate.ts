@@ -22,13 +22,10 @@ import {
   musicPromptFromVibe,
   sfxPromptFromVibe,
 } from "./elevenlabs";
-import {
-  generateVeoVideoBytes,
-  generateLyriaMusicBytes,
-} from "./gemini";
 import { buildCreativeBrief } from "./creative-brief";
-import { writeMusicPromptListeningToAudio } from "./music-prompt-audio";
+import { verifyAndRepairBrief } from "./verify-brief";
 import { saveVibe } from "./vibe-store";
+import { saveAsset } from "./storage";
 import {
   bumpVeoCompleted,
   clearProgress,
@@ -50,16 +47,14 @@ const CHAIN_LENGTH = Math.max(
   2,
   parseInt(process.env.VIBER_CHAIN_LENGTH ?? "4", 10),
 );
-// Music backend:
-//   "multi-bridge" — DEFAULT. Source(20s) ↔ Lyria(30s) ↔ Source(20s) ↔
-//                    Lyria(30s) interleaved with 5s crossfades. The
-//                    source re-anchors the feel twice across ~85s.
-//   "bridge"       — Source(30s) → 5s xfade → Lyria(60s) = ~85s. One
-//                    handoff. Simpler, less re-anchoring.
-//   "lyria"        — Pure Lyria 3 Clip generation, no source bridge.
-//   "elevenlabs"   — Pure ElevenLabs Music. Has Creator credits.
+// Music backend (post-Gemini, ElevenLabs is the only generator):
+//   "bridge"       — DEFAULT. Source(15s, fade-in) → 5s xfade →
+//                    ElevenLabs(60s) → 5s xfade → Source(15s, fade-out).
+//                    Sandwiches the generated music with the room's
+//                    actual recording on either side, ≈80s total.
+//   "elevenlabs"   — Pure ElevenLabs Music, no source bridge.
 const MUSIC_BACKEND = (
-  process.env.VIBER_MUSIC_BACKEND || "multi-bridge"
+  process.env.VIBER_MUSIC_BACKEND || "bridge"
 ).toLowerCase();
 // Crossfade duration when bridging source ↔ Lyria, in seconds.
 const BRIDGE_CROSSFADE_SEC = parseFloat(
@@ -101,69 +96,42 @@ export async function generateMusicAsset(
   await fs.mkdir(dir, { recursive: true });
 
   let buf: Buffer;
-  let extension = "mp3";
+  const extension = "mp3";
   let actualLengthMs = lengthMs;
 
-  // ----- bridge / multi-bridge modes -----
-  // Both modes mix real source audio with Lyria generated continuation.
-  // multi-bridge interleaves source and Lyria for richer re-anchoring.
-  if (MUSIC_BACKEND === "bridge" || MUSIC_BACKEND === "multi-bridge") {
-    const sourcePath = sourceSampleAbsolutePath(vibe);
+  // ----- bridge mode -----
+  // Source(15s, fade-in) → 5s xfade → ElevenLabs(60s) → 5s xfade →
+  // Source(15s, fade-out). Sandwiches the generated music with the
+  // actual room recording on either side. Falls through to pure
+  // elevenlabs if the vibe has no persisted source audio sample.
+  if (MUSIC_BACKEND === "bridge") {
+    const tmp = path.join(process.cwd(), ".viber", "tmp", `bridge-src-${vibe.id}`);
+    const sourcePath = await sourceSampleAbsolutePath(vibe, tmp);
     if (!sourcePath) {
       console.warn(
-        `${MUSIC_BACKEND} mode: vibe has no source audio sample, falling back to lyria`,
-      );
-    } else if (!process.env.GEMINI_API_KEY) {
-      console.warn(
-        `${MUSIC_BACKEND} mode: GEMINI_API_KEY missing, falling back to elevenlabs`,
+        "bridge mode: vibe has no source audio sample, falling back to pure elevenlabs",
       );
     } else {
       try {
-        const result =
-          MUSIC_BACKEND === "multi-bridge"
-            ? await multiBridgeSourceWithLyria(vibe, prompt, sourcePath)
-            : await bridgeSourceWithLyria(vibe, prompt, sourcePath);
+        const result = await bridgeSourceWithElevenLabs(vibe, prompt, sourcePath);
         buf = result.buffer;
         actualLengthMs = result.durationMs;
         const fname = `${vibe.id}-music.${extension}`;
-        const localPath = path.join(dir, fname);
-        await fs.writeFile(localPath, buf);
+        const stored = await saveAsset("generated", fname, buf, "audio/mpeg");
         return {
-          url: `/generated/${fname}`,
-          localPath,
+          url: stored.url,
+          localPath: stored.localPath ?? "",
           prompt,
           lengthMs: actualLengthMs,
           bytes: buf.byteLength,
         };
       } catch (e) {
         console.error(
-          `${MUSIC_BACKEND} mode failed, falling back to elevenlabs:`,
+          "bridge mode failed, falling back to pure elevenlabs:",
           e,
         );
       }
     }
-  }
-
-  // ----- pure lyria -----
-  if (MUSIC_BACKEND === "lyria") {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error(
-        "VIBER_MUSIC_BACKEND=lyria but GEMINI_API_KEY is missing",
-      );
-    }
-    const result = await generateLyriaMusicBytes({ prompt });
-    buf = result.buffer;
-    extension = result.mimeType.endsWith("wav") ? "wav" : "mp3";
-    const fname = `${vibe.id}-music.${extension}`;
-    const localPath = path.join(dir, fname);
-    await fs.writeFile(localPath, buf);
-    return {
-      url: `/generated/${fname}`,
-      localPath,
-      prompt,
-      lengthMs: await ffprobeMs(localPath).catch(() => actualLengthMs),
-      bytes: buf.byteLength,
-    };
   }
 
   // ----- elevenlabs (default fallback path) -----
@@ -172,29 +140,47 @@ export async function generateMusicAsset(
   }
   buf = await generateMusic({ prompt, lengthMs });
   const fname = `${vibe.id}-music.${extension}`;
-  const localPath = path.join(dir, fname);
-  await fs.writeFile(localPath, buf);
+  const stored = await saveAsset("generated", fname, buf, "audio/mpeg");
   return {
-    url: `/generated/${fname}`,
-    localPath,
+    url: stored.url,
+    localPath: stored.localPath ?? "",
     prompt,
     lengthMs: actualLengthMs,
     bytes: buf.byteLength,
   };
 }
 
-// Resolve the on-disk path to the persisted source audio sample, or
-// undefined if this vibe has none.
-function sourceSampleAbsolutePath(vibe: VibeObject): string | undefined {
+// Resolve the source audio sample to an on-disk absolute path that
+// ffmpeg can read. Handles both:
+//   - /uploads/{id}-source-sample.mp3  (local public dir)
+//   - https://*.public.blob.vercel-storage.com/...  (Vercel Blob)
+// For blob URLs, downloads to tmp and returns the temp path.
+async function sourceSampleAbsolutePath(
+  vibe: VibeObject,
+  tmp: string,
+): Promise<string | undefined> {
   const url = vibe.source?.audioSampleUrl;
   if (!url) return undefined;
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error(`source sample fetch ${res.status}: ${url}`);
+      return undefined;
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    await fs.mkdir(tmp, { recursive: true });
+    const local = path.join(tmp, "source-sample.mp3");
+    await fs.writeFile(local, buf);
+    return local;
+  }
   return path.join(process.cwd(), "public", url.replace(/^\//, ""));
 }
 
-// 30s source -> 5s ffmpeg acrossfade -> Lyria generated continuation,
-// optional SFX layer mixed underneath. Returns bridged mp3 bytes +
-// measured duration in ms.
-async function bridgeSourceWithLyria(
+// Source(15s, fade-in 1s) → 5s xfade → ElevenLabs(60s) → 5s xfade →
+// Source(15s, fade-out 1s). The persisted source sample is ≈30s, so
+// we trim its first half for the head and second half for the tail.
+// Optional SFX layer mixed underneath. Returns bridged mp3 + duration ms.
+async function bridgeSourceWithElevenLabs(
   vibe: VibeObject,
   prompt: string,
   sourcePath: string,
@@ -202,76 +188,35 @@ async function bridgeSourceWithLyria(
   const tmp = path.join(process.cwd(), ".viber", "tmp", `bridge-${vibe.id}`);
   await fs.mkdir(tmp, { recursive: true });
 
-  const lyriaPrompt = [
-    "You are continuing an existing 30-second recording. The piece is already underway when you begin. Do NOT include a fresh intro from silence. Pick up at the same tempo, key, and texture as the source, develop the material for the next 60 seconds, then resolve to a soft close.",
+  // Tell ElevenLabs to behave like a continuation, not a fresh open. The
+  // soft-prompt tail is appended to whatever the brief authored — the
+  // brief carries the [REFERENCE]/[STRUCTURE]/[ROOM]/[RULES] block,
+  // we just nudge the opening.
+  const elPrompt = [
+    "Continuation context: this 60-second piece will be sandwiched between two 15-second slices of an existing source recording. Begin already underway in the same tempo and key as the source. Do NOT open from silence. End softly so a crossfade back to the source reads as natural.",
     "",
     prompt,
   ].join("\n");
 
-  const lyriaResult = await generateLyriaMusicBytes({ prompt: lyriaPrompt });
-  const lyriaPath = path.join(tmp, "lyria.mp3");
-  await fs.writeFile(lyriaPath, lyriaResult.buffer);
+  const elBuf = await generateMusic({ prompt: elPrompt, lengthMs: 60000 });
+  const elPath = path.join(tmp, "elevenlabs.mp3");
+  await fs.writeFile(elPath, elBuf);
 
-  const bridgedPath = path.join(tmp, "bridged.mp3");
-  await ffmpegAcrossfade(
-    sourcePath,
-    lyriaPath,
-    BRIDGE_CROSSFADE_SEC,
-    bridgedPath,
-  );
-
-  const finalPath = await maybeLayerSfx(vibe, bridgedPath, tmp);
-  const durationMs = await ffprobeMs(finalPath).catch(() => 0);
-  const buffer = await fs.readFile(finalPath);
-
-  fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-  return { buffer, durationMs };
-}
-
-// Multi-bridge: interleaves source and Lyria. One Lyria call (~60s)
-// then sliced in half. Source is sliced into two overlapping windows
-// for variation. Stitched as src_a → xfade → lyria_a → xfade →
-// src_b → xfade → lyria_b. Total ≈85s.
-async function multiBridgeSourceWithLyria(
-  vibe: VibeObject,
-  prompt: string,
-  sourcePath: string,
-): Promise<{ buffer: Buffer; durationMs: number }> {
-  const tmp = path.join(process.cwd(), ".viber", "tmp", `mbridge-${vibe.id}`);
-  await fs.mkdir(tmp, { recursive: true });
-
-  const lyriaPrompt = [
-    "You are continuing an existing 30-second recording. The piece is already underway when you begin. Do NOT include a fresh intro from silence. Pick up at the same tempo, key, and texture as the source. Across 60 seconds, develop the material in two distinct passages so the second half feels evolved relative to the first. Stay in the same key throughout.",
-    "",
-    prompt,
-  ].join("\n");
-
-  const lyriaResult = await generateLyriaMusicBytes({ prompt: lyriaPrompt });
-  const lyriaPath = path.join(tmp, "lyria.mp3");
-  await fs.writeFile(lyriaPath, lyriaResult.buffer);
-
-  // Slice 4 segments via single ffmpeg pass with atrim filters.
-  // src_a = source[0..20], lyria_a = lyria[0..30],
-  // src_b = source[10..30], lyria_b = lyria[30..60].
-  // Each pair crossfaded by BRIDGE_CROSSFADE_SEC.
-  const stitchedPath = path.join(tmp, "multi.mp3");
   const xf = BRIDGE_CROSSFADE_SEC;
+  const stitchedPath = path.join(tmp, "stitched.mp3");
+  // [shead] = source[0..15] with 1s fade-in
+  // [el]    = generated 60s body
+  // [stail] = source[15..30] with 1s fade-out
+  // Two acrossfades chain head→body→tail.
   const filter = [
-    `[0:a]atrim=0:20,asetpts=PTS-STARTPTS[s1]`,
-    `[1:a]atrim=0:30,asetpts=PTS-STARTPTS[l1]`,
-    `[0:a]atrim=10:30,asetpts=PTS-STARTPTS[s2]`,
-    `[1:a]atrim=30:60,asetpts=PTS-STARTPTS[l2]`,
-    `[s1][l1]acrossfade=d=${xf}:c1=tri:c2=tri[m1]`,
-    `[m1][s2]acrossfade=d=${xf}:c1=tri:c2=tri[m2]`,
-    `[m2][l2]acrossfade=d=${xf}:c1=tri:c2=tri[out]`,
+    `[0:a]atrim=0:15,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=1[shead]`,
+    `[0:a]atrim=15:30,asetpts=PTS-STARTPTS,afade=t=out:st=14:d=1[stail]`,
+    `[1:a]asetpts=PTS-STARTPTS[el]`,
+    `[shead][el]acrossfade=d=${xf}:c1=tri:c2=tri[m1]`,
+    `[m1][stail]acrossfade=d=${xf}:c1=tri:c2=tri[out]`,
   ].join(";");
 
-  await ffmpegFilter(
-    [sourcePath, lyriaPath],
-    filter,
-    "[out]",
-    stitchedPath,
-  );
+  await ffmpegFilter([sourcePath, elPath], filter, "[out]", stitchedPath);
 
   const finalPath = await maybeLayerSfx(vibe, stitchedPath, tmp);
   const durationMs = await ffprobeMs(finalPath).catch(() => 0);
@@ -446,8 +391,8 @@ export async function generateVideoAsset(
   vibe: VibeObject,
   musicLocalPath?: string,
 ): Promise<VideoResult> {
-  if (!FAL_KEY && !process.env.GEMINI_API_KEY) {
-    throw new Error("video gen needs FAL_API_KEY or GEMINI_API_KEY");
+  if (!FAL_KEY) {
+    throw new Error("video gen needs FAL_API_KEY");
   }
 
   const tmp = path.join(process.cwd(), ".viber", "tmp", `gen-${vibe.id}`);
@@ -465,11 +410,9 @@ export async function generateVideoAsset(
   const cleanupTmp = () =>
     fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
 
-  // chain mode is the default. Either Fal or Gemini can do
-  // image-to-video for continuations; whichever key is present wins,
-  // with Fal preferred when both are set. If neither is set or chain
-  // fails, drop to hero-only — never to a stills slideshow.
-  if (VIDEO_MODE === "chain" && (FAL_KEY || process.env.GEMINI_API_KEY)) {
+  // chain mode is the default. Fal Veo image-to-video does the
+  // continuations. If chain fails, drop to hero-only — never to stills.
+  if (VIDEO_MODE === "chain") {
     try {
       const r = await generateChained(vibe, tmp, outDir, musicLocalPath);
       cleanupTmp();
@@ -480,11 +423,6 @@ export async function generateVideoAsset(
       console.error("chain mode failed, falling back to hero-only:", e);
       setStage(vibe.id, "veo", { message: "chain failed, trying hero-only" });
     }
-  } else if (VIDEO_MODE === "chain") {
-    console.warn(
-      "chain mode requires FAL_API_KEY or GEMINI_API_KEY, falling back to hero-only",
-    );
-    setStage(vibe.id, "veo", { message: "no video key, hero-only mode" });
   }
 
   try {
@@ -591,21 +529,23 @@ async function generateChained(
   setStage(vibe.id, "stitch", { message: "stitching with ffmpeg" });
 
   const outName = `${vibe.id}.mp4`;
-  const outPath = path.join(outDir, outName);
-  // Tiny crossfade (0.2s) masks any sub-pixel mismatch at the seam
-  // without being long enough to read as a transition.
+  // Stitch to a tmp file first, then promote to storage (Vercel Blob
+  // or /public/generated). Storage URL is what the player loads.
+  const tmpOut = path.join(outDir, outName);
   const totalSeconds = await stitchClips({
     clips,
     music: musicLocalPath ?? null,
-    out: outPath,
+    out: tmpOut,
     crossfadeSeconds: 0.2,
   });
 
-  const stat = await fs.stat(outPath);
+  const finalBuf = await fs.readFile(tmpOut);
+  const stored = await saveAsset("generated", outName, finalBuf, "video/mp4");
+
   return {
-    url: `/generated/${outName}`,
+    url: stored.url,
     durationSeconds: totalSeconds,
-    bytes: stat.size,
+    bytes: stored.size,
   };
 }
 
@@ -673,17 +613,17 @@ async function generateHeroOnly(
   bumpVeoCompleted(vibe.id, "hero clip done");
   setStage(vibe.id, "stitch", { message: "writing final mp4" });
 
-  // Just copy as the deliverable. Veo's native audio is the soundtrack.
-  // The HTML player loops the file for ambient playback.
+  // Persist via storage abstraction. Vercel Blob if configured (so the
+  // mp4 survives serverless deploys), else /public/generated. Veo's
+  // native audio stays as the soundtrack; the HTML player loops it.
   const outName = `${vibe.id}.mp4`;
-  const outPath = path.join(outDir, outName);
-  await fs.copyFile(veoPath, outPath);
+  const veoBuf = await fs.readFile(veoPath);
+  const stored = await saveAsset("generated", outName, veoBuf, "video/mp4");
 
-  const stat = await fs.stat(outPath);
   return {
-    url: `/generated/${outName}`,
+    url: stored.url,
     durationSeconds: 8,
-    bytes: stat.size,
+    bytes: stored.size,
   };
 }
 
@@ -713,26 +653,14 @@ export async function generatePreview(vibe: VibeObject): Promise<{
 async function ensureBrief(vibe: VibeObject): Promise<void> {
   if (vibe.creativeBrief) return;
   try {
-    const brief = await buildCreativeBrief(vibe);
-
-    // Tier 1 upgrade: if we have a persisted source audio sample and a
-    // Gemini key, get an audio-listening pass to rewrite the music
-    // prompt. The downstream music model still can't hear, but its
-    // text prompt now contains specifics captured by direct listening.
-    if (vibe.source?.audioSampleUrl && process.env.GEMINI_API_KEY) {
-      try {
-        const audioAware = await writeMusicPromptListeningToAudio(vibe, brief);
-        if (audioAware && audioAware.length > 50) {
-          brief.musicPrompt = audioAware;
-        }
-      } catch (e) {
-        console.warn(
-          "audio-aware music prompt failed, keeping text-only:",
-          e,
-        );
-      }
-    }
-
+    // The new 7-stage brief grounds the musicPrompt directly in
+    // vibe.audioAnalysis (which itself comes from a 3-slice gpt-4o-audio
+    // listening pass at extract time). The verifier then runs Layer 1
+    // checks (subject grounding, shot prop citation, hero motion events,
+    // music prompt audio citations, chain continuity) and only spends
+    // tokens on Layer 2 LLM repair for fields that fail.
+    const draft = await buildCreativeBrief(vibe);
+    const brief = await verifyAndRepairBrief(vibe, draft);
     vibe.creativeBrief = brief;
     await saveVibe(vibe);
   } catch (e) {
@@ -796,14 +724,23 @@ function heroVeoPromptFromVibe(v: VibeObject): string {
   ].join("\n");
 }
 
-// Chain mode prompts: clip 0 is the hero text-to-video anchor. Clips
-// 1..length-1 are CONTINUATION prompts — each is sent with the previous
-// clip's last frame as its firstFrame, so the prompt instructs Veo to
-// pick up motion from that exact frame and continue the take. The
-// reader (Veo) literally sees the previous final frame, so we lean on
-// the brief's shot motion descriptions to evolve the action over time
-// rather than cutting to a different angle.
+// Chain mode prompts.
+//
+// Preferred path: the creative brief's stage 7 (Plan-then-Write chain)
+// already produced exactly N continuity-aware prompts. In that case we
+// wrap each one in the shared style/forbidden block and use them
+// directly — coherence is owned by ONE LLM reasoning pass, not
+// assembled here from drifting fragments.
+//
+// Fallback: when the brief has no chainPrompts, build the chain locally
+// from heroShot + shots like the old behaviour.
 function chainedVeoPromptsFromVibe(v: VibeObject, length: number): string[] {
+  const briefChain = v.creativeBrief?.chainPrompts;
+  if (briefChain && briefChain.length >= 2) {
+    const taken = briefChain.slice(0, length);
+    return taken.map((body, i) => wrapChainPromptFromBrief(v, body, i, taken.length));
+  }
+
   const subject =
     v.creativeBrief?.subject ?? `${v.spatial} with ${v.lighting}`;
   const heroMotion = v.creativeBrief?.heroShot?.motion ?? motionFrom(v);
@@ -816,12 +753,7 @@ function chainedVeoPromptsFromVibe(v: VibeObject, length: number): string[] {
   );
 
   const prompts: string[] = [];
-
-  // Clip 0 — text-to-video anchor (hero shot).
   prompts.push(heroVeoPromptFromVibe(v));
-
-  // Clips 1..length-1 — continuation prompts. Cycle through brief
-  // shot motions to evolve the action; if no shots, reuse heroMotion.
   for (let i = 1; i < length; i++) {
     const motion =
       shotMotions.length > 0
@@ -829,8 +761,38 @@ function chainedVeoPromptsFromVibe(v: VibeObject, length: number): string[] {
         : heroMotion;
     prompts.push(continuationVeoPrompt(v, subject, motion, i, length));
   }
-
   return prompts;
+}
+
+// Wraps a brief-authored chain prompt body with the project's standard
+// continuation header and shared style/forbidden tail. The brief writes
+// the scene-specific instructions (subject restatement, prior-clip
+// reference, timestamped motion); we add the framing context Veo needs.
+function wrapChainPromptFromBrief(
+  v: VibeObject,
+  body: string,
+  index: number,
+  total: number,
+): string {
+  const isFirst = index === 0;
+  const header = isFirst
+    ? [
+        `[REFERENCE — opening shot of a continuous take]`,
+        `8-second master shot. Segment 1 of ${total}. The next ${total - 1} clips will continue from this clip's final frame, so end on a stable composition.`,
+      ]
+    : [
+        `[REFERENCE — this is a continuation, not a new shot]`,
+        `An image is provided as the FIRST FRAME of this clip. Segment ${index + 1} of ${total} in one continuous take.`,
+        `Camera position, lens, lighting, and the entire spatial setup must EXACTLY MATCH the provided first frame. Do NOT cut. Do NOT teleport. Do NOT change time of day or weather.`,
+      ];
+
+  return [
+    ...header,
+    ``,
+    body.trim(),
+    ``,
+    veoStyleBlock(v),
+  ].join("\n");
 }
 
 // Continuation prompt: Veo will receive a first-frame image. The prompt
@@ -872,31 +834,25 @@ function motionFrom(v: VibeObject): string {
   return "the cook tosses noodles in a wok with visible flame, plates a dish, hands it to a waiting patron; a queue is visible behind; foot traffic crosses the foreground throughout";
 }
 
-// ---------- Veo (Gemini preferred when chaining; Fal otherwise) ----------
+// ---------- Veo (Fal-only) ----------
 
 type VeoCallOpts = {
   prompt: string;
   withAudio: boolean;
   outPath: string;
-  // Optional first-frame anchor for image-to-video continuation. When
-  // present, the call MUST route through Gemini Veo (Fal's text-only
-  // veo3/fast endpoint can't accept an image input).
+  // Optional first-frame anchor for image-to-video continuation.
   firstFrame?: { mimeType: string; dataBase64: string };
 };
 
 async function veoCallByPrompt(opts: VeoCallOpts): Promise<string> {
-  // Both Fal and Gemini can do image-to-video. Prefer Fal when
-  // FAL_KEY is set (cheaper + no Veo quota issues). Fall back to
-  // Gemini if only it's available.
-  if (FAL_KEY) return generateVeoViaFal(opts);
-  if (process.env.GEMINI_API_KEY) return generateVeoViaGemini(opts);
-  throw new Error("neither FAL_API_KEY nor GEMINI_API_KEY set");
+  if (!FAL_KEY) throw new Error("FAL_API_KEY missing");
+  return generateVeoViaFal(opts);
 }
 
 async function generateVeoViaFal(opts: VeoCallOpts): Promise<string> {
   // Image-to-video uses a different Fal endpoint than text-to-video,
-  // and takes image_url. Fal accepts a data: URI so we can ship the
-  // PNG bytes inline without a separate upload step.
+  // and takes image_url. Fal accepts a data: URI so we ship the PNG
+  // bytes inline without a separate upload step.
   const isI2V = Boolean(opts.firstFrame);
   const endpoint = isI2V ? VEO_I2V_MODEL : VEO_MODEL;
   const body: Record<string, unknown> = {
@@ -925,19 +881,6 @@ async function generateVeoViaFal(opts: VeoCallOpts): Promise<string> {
   const url = data.video?.url;
   if (!url) throw new Error("fal veo response missing video url");
   await downloadTo(url, opts.outPath);
-  return opts.outPath;
-}
-
-async function generateVeoViaGemini(opts: VeoCallOpts): Promise<string> {
-  const buf = await generateVeoVideoBytes({
-    prompt: opts.prompt,
-    durationSeconds: 8,
-    generateAudio: opts.withAudio,
-    resolution: "720p",
-    aspectRatio: "16:9",
-    firstFrame: opts.firstFrame,
-  });
-  await fs.writeFile(opts.outPath, buf);
   return opts.outPath;
 }
 

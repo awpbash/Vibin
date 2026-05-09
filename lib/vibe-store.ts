@@ -9,6 +9,12 @@ const store = new Map<string, VibeObject>();
 const placesByVibe = new Map<string, Place[]>();
 let hydrated = false;
 
+// Module-level guards so we don't spam the dev terminal with stack
+// traces every time a route re-renders. Real errors still surface to the
+// error boundary; this is purely about console hygiene.
+let warnedPlacesPermission = false;
+let warnedPlacesGeneric = false;
+
 async function hydrate() {
   if (hydrated) return;
   hydrated = true;
@@ -64,7 +70,25 @@ export async function getPlacesForVibe(vibeId: string): Promise<Place[]> {
     placesByVibe.set(vibeId, real);
     return real;
   } catch (e) {
-    console.error("places-search failed:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    // Known config issue: Places API (New) not enabled or key blocked.
+    // Log once per process so the terminal stays usable; the page still
+    // renders with [] and the map shows its empty placeholder.
+    const isPermission = /\b(403|PERMISSION_DENIED|has not been used|is disabled)\b/i.test(
+      msg,
+    );
+    if (isPermission) {
+      if (!warnedPlacesPermission) {
+        warnedPlacesPermission = true;
+        console.warn(
+          "[viber] places-search disabled: enable Places API (New) in Google Cloud Console for this project.",
+        );
+      }
+    } else if (!warnedPlacesGeneric) {
+      warnedPlacesGeneric = true;
+      // First occurrence only, single-line, no stack.
+      console.warn(`[viber] places-search failed: ${msg.split("\n")[0]}`);
+    }
     return [];
   }
 }

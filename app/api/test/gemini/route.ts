@@ -1,6 +1,7 @@
-// Gemini 2.5 Flash audio understanding test endpoint. Downloads a short
-// section of a YouTube video, rips audio with ffmpeg, sends it inline to
-// Gemini, and returns the AudioAnalysis JSON.
+// Audio understanding test endpoint. Downloads a short section of a
+// YouTube video, rips audio with ffmpeg into 3 × 10s slices, sends them
+// to gpt-4o-audio-preview via the Self-Consistency analyzer, and
+// returns the reconciled AudioAnalysis JSON.
 //
 // Body (all optional):
 //   { url?: string, preset?: "tokyo" | "lisbon" | "hawker", durationSec?: number }
@@ -11,7 +12,7 @@ import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 import { promises as fs } from "fs";
 import path from "path";
-import { analyzeAudio } from "@/lib/gemini-audio";
+import { analyzeAudio } from "@/lib/audio-analysis";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -32,9 +33,9 @@ const PRESETS: Record<string, { url: string; label: string }> = {
 };
 
 export async function POST(req: Request) {
-  if (!process.env.GEMINI_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json(
-      { ok: false, error: "GEMINI_API_KEY missing" },
+      { ok: false, error: "OPENAI_API_KEY missing" },
       { status: 500 },
     );
   }
@@ -68,26 +69,36 @@ export async function POST(req: Request) {
       ok: true,
     });
 
-    // Stage 2: ffmpeg trim + transcode to 30s mp3 mono 96kbps
-    const audioMp3 = path.join(tmp, "clip.mp3");
-    const s2 = performance.now();
+    // Stage 2: ffmpeg slice into 3 × 10s windows for self-consistency.
     const totalDur = await ffprobeDuration(audioRaw);
-    const start = Math.max(0, totalDur / 2 - durationSec / 2);
-    await ffmpegAudio(audioRaw, audioMp3, start, durationSec);
-    const stat = await fs.stat(audioMp3);
+    const sliceLen = Math.min(10, Math.max(4, totalDur));
+    const winStart = Math.max(0, totalDur / 2 - durationSec / 2);
+    const slicePoints = [
+      { start: 0, label: `intro (0-${Math.round(sliceLen)}s)` },
+      { start: Math.max(0, winStart), label: `mid (~${Math.round(winStart)}s)` },
+      { start: Math.max(0, totalDur - sliceLen), label: `outro (last ${Math.round(sliceLen)}s)` },
+    ];
+    const s2 = performance.now();
+    const slices: { buf: Buffer; mime: string; label: string }[] = [];
+    for (let i = 0; i < slicePoints.length; i++) {
+      const out = path.join(tmp, `slice-${i}.mp3`);
+      await ffmpegAudio(audioRaw, out, slicePoints[i].start, sliceLen);
+      const buf = await fs.readFile(out);
+      slices.push({ buf, mime: "audio/mp3", label: slicePoints[i].label });
+    }
+    const totalBytes = slices.reduce((a, s) => a + s.buf.byteLength, 0);
     stages.push({
-      name: "ffmpeg",
+      name: "ffmpeg-slices",
       ms: Math.round(performance.now() - s2),
       ok: true,
-      note: `${stat.size} bytes`,
+      note: `3 slices, ${totalBytes} bytes total`,
     });
 
-    // Stage 3: Gemini 2.5 Flash audio analysis
-    const buf = await fs.readFile(audioMp3);
+    // Stage 3: gpt-4o-audio multi-slice Self-Consistency analysis
     const s3 = performance.now();
-    const analysis = await analyzeAudio(buf.toString("base64"), "audio/mp3");
+    const analysis = await analyzeAudio({ slices });
     stages.push({
-      name: "gemini",
+      name: "gpt-4o-audio",
       ms: Math.round(performance.now() - s3),
       ok: true,
     });
@@ -101,13 +112,15 @@ export async function POST(req: Request) {
       durationSec,
       stages,
       analysis,
-      bytes: stat.size,
-      // Approximate cost: gemini-2.5-flash audio = ~32 tokens/sec @ $0.30/M
-      // → 30s ≈ 960 tokens ≈ $0.0003 input + tiny output ≈ $0.0005 total
-      estCostUsd: Number(((durationSec * 32 * 0.3) / 1_000_000 + 0.0001).toFixed(5)),
+      bytes: totalBytes,
+      // Approximate cost: gpt-4o-audio-preview ≈ $40/M audio tokens.
+      // 3 slices × 10s × ~25 tokens/s = 750 audio tokens × 3 ≈ 2250
+      // tokens input + ~600 output + a tiny gpt-5.4 reconcile call.
+      // ≈ $0.10 per call.
+      estCostUsd: 0.10,
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "gemini audio test failed";
+    const msg = e instanceof Error ? e.message : "audio test failed";
     return NextResponse.json(
       {
         ok: false,

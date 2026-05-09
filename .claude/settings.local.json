@@ -3,7 +3,12 @@
     "allow": [
       "mcp__plugin_context7_context7__resolve-library-id",
       "mcp__plugin_context7_context7__query-docs",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(node scripts/smoke-audio-video.mjs)",
+      "Bash(tee scripts/smoke-results.txt)",
+      "Bash(echo \"---EXIT $?---\")",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }

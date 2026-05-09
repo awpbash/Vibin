@@ -55,12 +55,20 @@ export async function findPlacesNear(
   // Hydrate cache from disk (lazy, once).
   await hydrateCache();
 
-  // Infer baseline vibe for each candidate (cached).
-  const enriched = await Promise.all(
+  // Infer baseline vibe for each candidate (cached). One bad place must
+  // not sink the whole search — drop failures and keep going.
+  const enrichedRaw = await Promise.all(
     candidates.slice(0, 10).map(async (gp) => {
-      const baseline = await getOrInferBaseline(gp);
-      return { gp, baseline };
+      try {
+        const baseline = await getOrInferBaseline(gp);
+        return { gp, baseline };
+      } catch {
+        return null;
+      }
     }),
+  );
+  const enriched = enrichedRaw.filter(
+    (x): x is { gp: GooglePlace; baseline: CachedBaseline } => x !== null,
   );
 
   // Cosine vs query.
@@ -126,7 +134,30 @@ async function searchNearby(): Promise<GooglePlace[]> {
     },
   );
   if (!res.ok) {
-    throw new Error(`places searchNearby ${res.status}: ${await res.text()}`);
+    // Read body but extract a single human-readable line so callers can
+    // log it without dumping a wall of JSON into the terminal. Common
+    // shape: { error: { code, message, status } }.
+    let detail = `${res.status}`;
+    try {
+      const body = await res.text();
+      try {
+        const parsed = JSON.parse(body) as {
+          error?: { status?: string; message?: string };
+        };
+        const status = parsed.error?.status ?? "";
+        const message = parsed.error?.message ?? "";
+        if (status || message) {
+          detail = [res.status, status, message].filter(Boolean).join(" ");
+        } else if (body) {
+          detail = `${res.status} ${body.slice(0, 200)}`;
+        }
+      } catch {
+        if (body) detail = `${res.status} ${body.slice(0, 200)}`;
+      }
+    } catch {
+      // body unreadable, fall through with status only
+    }
+    throw new Error(`places searchNearby ${detail}`);
   }
   const data = (await res.json()) as { places?: GooglePlace[] };
   return data.places ?? [];

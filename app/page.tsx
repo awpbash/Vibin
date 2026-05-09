@@ -116,18 +116,6 @@ export default function Home() {
 
 function Header() {
   return (
-<<<<<<< HEAD
-    <header className="pt-10 flex items-baseline justify-between border-b border-[var(--color-rule)] pb-5">
-      <Link href="/" className="display-italic text-[32px] tracking-tight">
-        viber<span className="text-[var(--color-stamp)]">.</span>
-      </Link>
-      <div className="flex items-baseline gap-5 caption">
-        <span className="hidden sm:inline">edition no. 001</span>
-        <span className="hidden sm:inline">·</span>
-        <span>singapore</span>
-        <span>·</span>
-        <span className="tabular-nums">may 26</span>
-=======
     <div className="pt-6">
       <div className="border-t-2 border-[var(--color-ink)] flex items-center justify-between pt-2 pb-3">
         <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--color-ink-mute)]">
@@ -136,14 +124,15 @@ function Header() {
         <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--color-ink-mute)]">
           edition 001 · singapore
         </span>
->>>>>>> 5ca1ea169327df0bd12d1626c4b3402c04ec7c6e
       </div>
       <header className="flex items-baseline justify-between border-b border-[var(--color-rule)] pb-4 md:pb-5">
         <Link href="/" className="display-italic text-[30px] md:text-[32px] tracking-tight">
           viber<span className="text-[var(--color-stamp)]">.</span>
         </Link>
         <div className="flex items-baseline gap-4 md:gap-5 caption">
-          <Link href="/wizard" className="link-underline hidden sm:inline">field lab</Link>
+          <Link href="/archive" className="link-underline">archive</Link>
+          <span className="hidden sm:inline">·</span>
+          <Link href="/lab" className="link-underline hidden sm:inline">field lab</Link>
           <span className="hidden sm:inline">·</span>
           <span className="hidden sm:inline">edition no. 001</span>
           <span className="hidden sm:inline">·</span>

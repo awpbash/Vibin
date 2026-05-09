@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import path from "path";
+import { promises as fs } from "fs";
 import { getVibe, saveVibe } from "@/lib/vibe-store";
 import { generateVideoAsset } from "@/lib/generate";
+import { readAsset } from "@/lib/storage";
 
 export const runtime = "nodejs";
 // Chain mode runs 4 Veo calls in parallel; each can take 60-180s.
@@ -30,14 +32,25 @@ export async function POST(req: Request) {
     });
   }
 
-  // Reuse music if it exists.
+  // Reuse music if it exists. Music URL might be local (/generated/...)
+  // or remote (Vercel Blob https://). Either way, ffmpeg needs an
+  // on-disk file path, so download blob URLs to tmp first.
   let musicLocalPath: string | undefined;
-  if (vibe.generatedAssets?.musicUrl) {
-    musicLocalPath = path.join(
-      process.cwd(),
-      "public",
-      vibe.generatedAssets.musicUrl.replace(/^\//, ""),
-    );
+  const musicUrl = vibe.generatedAssets?.musicUrl;
+  if (musicUrl) {
+    if (musicUrl.startsWith("http://") || musicUrl.startsWith("https://")) {
+      const buf = await readAsset(musicUrl);
+      const tmpDir = path.join(process.cwd(), ".viber", "tmp", `music-${vibe.id}`);
+      await fs.mkdir(tmpDir, { recursive: true });
+      musicLocalPath = path.join(tmpDir, "music.mp3");
+      await fs.writeFile(musicLocalPath, buf);
+    } else {
+      musicLocalPath = path.join(
+        process.cwd(),
+        "public",
+        musicUrl.replace(/^\//, ""),
+      );
+    }
   }
 
   const t0 = performance.now();

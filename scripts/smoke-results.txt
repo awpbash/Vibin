@@ -1,0 +1,68 @@
+=== Viber smoke test ===
+env file: C:\Users\ngjun\Desktop\Codes\aieng\viber\.env.local
+OPENAI_API_KEY:     key loaded
+ELEVENLABS_API_KEY: key loaded
+FAL_API_KEY:        key loaded
+
+[audio] using C:\Users\ngjun\Desktop\Codes\aieng\viber\public\uploads\v-moxy5kfa-xf4j-source-sample.mp3 (164556 bytes, source=existing-upload)
+[audio] confirmed working model: gpt-4o-audio-preview
+
+=== RESULTS ===
+- [PASS 200] OpenAI audio (chat completions) [gpt-4o-audio-preview]  model=gpt-4o-audio-preview  2172ms
+    I hear a calm, melodic tune with gentle bird sounds in the background.
+- [PASS 200] OpenAI text (gpt-4o-mini)  model=gpt-4o-mini  1031ms
+    Hello! How can I assist you today?
+- [PASS 200] ElevenLabs Music  model=music  6477ms
+    ct=audio/mpeg len=160541 (declared )
+- [PASS 200] ElevenLabs SFX  model=sound-generation  2399ms
+    ct=audio/mpeg len=33062
+- [AUTH_OK (aborted)] Fal Veo3 Fast (t2v)  model=veo3/fast  5012ms
+    request aborted at 5s — auth accepted, generation killed
+- [AUTH_OK (aborted)] Fal Veo3 Fast (i2v)  model=veo3/fast/image-to-video  5003ms
+    request aborted at 5s — auth accepted, generation killed
+
+=== JSON TABLE ===
+[
+  {
+    "endpoint": "OpenAI audio (chat completions) [gpt-4o-audio-preview]",
+    "status": "PASS 200",
+    "modelOrId": "gpt-4o-audio-preview",
+    "latency_ms": 2172,
+    "snippet": "I hear a calm, melodic tune with gentle bird sounds in the background."
+  },
+  {
+    "endpoint": "OpenAI text (gpt-4o-mini)",
+    "status": "PASS 200",
+    "modelOrId": "gpt-4o-mini",
+    "latency_ms": 1031,
+    "snippet": "Hello! How can I assist you today?"
+  },
+  {
+    "endpoint": "ElevenLabs Music",
+    "status": "PASS 200",
+    "modelOrId": "music",
+    "latency_ms": 6477,
+    "snippet": "ct=audio/mpeg len=160541 (declared )"
+  },
+  {
+    "endpoint": "ElevenLabs SFX",
+    "status": "PASS 200",
+    "modelOrId": "sound-generation",
+    "latency_ms": 2399,
+    "snippet": "ct=audio/mpeg len=33062"
+  },
+  {
+    "endpoint": "Fal Veo3 Fast (t2v)",
+    "status": "AUTH_OK (aborted)",
+    "modelOrId": "veo3/fast",
+    "latency_ms": 5012,
+    "snippet": "request aborted at 5s — auth accepted, generation killed"
+  },
+  {
+    "endpoint": "Fal Veo3 Fast (i2v)",
+    "status": "AUTH_OK (aborted)",
+    "modelOrId": "veo3/fast/image-to-video",
+    "latency_ms": 5003,
+    "snippet": "request aborted at 5s — auth accepted, generation killed"
+  }
+]

@@ -14,3 +14,6 @@ next-env.d.ts
 .viber/
 public/uploads/
 public/generated/
+
+.vercel
+.env*.local

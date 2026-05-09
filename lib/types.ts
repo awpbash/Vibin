@@ -56,8 +56,9 @@ export type VibeObject = {
   createdAt: number;
 };
 
-// Output of Gemini 2.5 Flash audio analysis. The musical fields override
-// the vision-guessed musicAnchor when hasMusic is true.
+// Output of GPT-4o audio analysis (3-slice self-consistency, then text
+// reconciliation). The musical fields override the vision-guessed
+// musicAnchor when hasMusic is true.
 export type AudioAnalysis = {
   hasMusic: boolean;
   genre: string;
@@ -67,18 +68,24 @@ export type AudioAnalysis = {
   ambientLayers: string[];      // non-music room sounds heard
   audioMood: string[];
   musicalCharacter: string;     // free-text descriptor: "sparse vibraphone over tape hiss"
+  hasVocals?: boolean;
+  vocalCharacter?: string;      // "soft female alto, almost spoken" when hasVocals
 };
 
-// One LLM call produces this brief once per vibe. It is the shared
-// reference all four generators (3 stills, Veo, ElevenLabs) cite, so
-// the renders look like the same place from different angles.
+// Built by a 7-stage least-to-most pipeline (creative-brief.ts). Each
+// stage carries forward prior outputs so the renders all cite the same
+// imagined scene. The chainPrompts field drives the 4-clip Veo chain so
+// continuity is owned by ONE LLM reasoning pass, not assembled at video
+// time from drifting fragments.
 export type CreativeBrief = {
   subject: string;              // one paragraph, the imagined scene
   shots: { angle: string; description: string }[];   // exactly 3
   heroShot: { description: string; motion: string }; // for the Veo clip
   musicPrompt: string;          // ElevenLabs-friendly, ToS-soft
   hasVocals: boolean;           // true only when source/mood implies sung music
+  vocalCharacter?: string;      // "soft female alto, almost spoken"
   lyrics: string;               // [Verse]/[Chorus] structure when hasVocals, else ""
+  chainPrompts?: string[];      // 4 prompts for the Veo first/last-frame chain
 };
 
 export type Place = {

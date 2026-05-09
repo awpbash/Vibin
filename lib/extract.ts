@@ -8,7 +8,8 @@ import { promises as fs } from "fs";
 import path from "path";
 import OpenAI from "openai";
 import { VIBE_EXTRACTION_PROMPT, VIBE_OBJECT_SCHEMA } from "./vibe-prompt";
-import { analyzeAudio } from "./gemini-audio";
+import { analyzeAudio } from "./audio-analysis";
+import { saveAsset } from "./storage";
 import type { AudioAnalysis, VibeObject } from "./types";
 
 const VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5.4-mini";
@@ -246,34 +247,57 @@ async function sampleFrames(
   return frames;
 }
 
-// Pulls a 30s mono mp3 from the middle of the source video, persists
-// it to public/uploads so it's a real artefact, and asks Gemini 3
-// Flash to break it down. All failures are non-fatal — extraction
-// continues with a vision-only vibe if audio analysis breaks.
+// Pulls a ~30s mono mp3 from the middle of the source video, persists
+// it as the canonical playable artefact, AND extracts 3 × 10s slices
+// (intro, mid, outro) for the gpt-4o-audio Self-Consistency pass.
+// Slices give us 3 independent listens for tempo/key/instrument
+// consensus rather than over-trusting one chunk. All failures are
+// non-fatal — extraction continues with a vision-only vibe if audio
+// analysis breaks.
 async function runAudioAnalysis(
   videoPath: string,
   tmp: string,
   duration: number,
   vibeId: string,
 ): Promise<{ analysis: AudioAnalysis; sampleUrl: string } | undefined> {
-  if (!process.env.GEMINI_API_KEY) return undefined;
+  if (!process.env.OPENAI_API_KEY) return undefined;
   try {
-    const tmpAudio = path.join(tmp, "audio.mp3");
-    const start = Math.max(0, duration / 2 - 15);
-    const dur = Math.min(30, Math.max(4, duration));
-    await ffmpegAudio(videoPath, tmpAudio, start, dur);
-    const buf = await fs.readFile(tmpAudio);
+    // 30s persisted sample, centered on the middle of the source.
+    const sampleStart = Math.max(0, duration / 2 - 15);
+    const sampleDur = Math.min(30, Math.max(4, duration));
+    const tmpSample = path.join(tmp, "audio.mp3");
+    await ffmpegAudio(videoPath, tmpSample, sampleStart, sampleDur);
+    const sampleBuf = await fs.readFile(tmpSample);
 
-    // Persist the sample so it survives tmp cleanup and is playable.
-    // This is the canonical "what does this place actually sound like"
-    // artefact — the music generator's prompt anchors on its analysis.
-    const publicDir = path.join(process.cwd(), "public", "uploads");
-    await fs.mkdir(publicDir, { recursive: true });
+    // Persist via storage abstraction — Vercel Blob if configured, else
+    // /public/uploads/ on disk. Either way produces a public URL.
     const sampleName = `${vibeId}-source-sample.mp3`;
-    await fs.writeFile(path.join(publicDir, sampleName), buf);
+    const stored = await saveAsset("uploads", sampleName, sampleBuf, "audio/mpeg");
 
-    const analysis = await analyzeAudio(buf.toString("base64"), "audio/mp3");
-    return { analysis, sampleUrl: `/uploads/${sampleName}` };
+    // 3 × 10s slices spaced across the source. For very short sources
+    // (under ~12s), all three slices collapse onto the same window —
+    // Self-Consistency degrades but the call still works.
+    const sliceLen = Math.min(10, Math.max(4, duration));
+    const intro = Math.max(0, Math.min(0, duration - sliceLen));
+    const mid = Math.max(0, duration / 2 - sliceLen / 2);
+    const outro = Math.max(0, duration - sliceLen);
+
+    const slicePaths = [
+      { start: intro, label: `intro (0-${Math.round(sliceLen)}s)` },
+      { start: mid, label: `mid (~${Math.round(mid)}s)` },
+      { start: outro, label: `outro (last ${Math.round(sliceLen)}s)` },
+    ];
+
+    const slices: { buf: Buffer; mime: string; label: string }[] = [];
+    for (let i = 0; i < slicePaths.length; i++) {
+      const p = path.join(tmp, `slice-${i}.mp3`);
+      await ffmpegAudio(videoPath, p, slicePaths[i].start, sliceLen);
+      const buf = await fs.readFile(p);
+      slices.push({ buf, mime: "audio/mp3", label: slicePaths[i].label });
+    }
+
+    const analysis = await analyzeAudio({ slices });
+    return { analysis, sampleUrl: stored.url };
   } catch (e) {
     console.error("audio analysis failed:", e);
     return undefined;
@@ -371,9 +395,160 @@ type VisionDraft = Omit<VibeObject, "id" | "source" | "createdAt" | "embedding">
   weatherImplied: string;
 };
 
+// Two-pass Plan-and-Solve to ground the VibeObject in observed evidence
+// instead of letting the model free-associate from a single vision call.
+// Pass 1 inventories ONLY what's directly visible in the frames (palette
+// hexes from real pixels, light sources with frame indices, etc) and
+// refuses to invent. Pass 2 is text-only synthesis from those grounded
+// observations into the canonical VibeObject shape, with conservative
+// defaults whenever evidence is absent.
+
+const OBSERVATIONS_PROMPT = `
+You are a visual evidence inventory tool for a sensory analyst pipeline.
+You will be given N frames sampled at uniform intervals from a video.
+
+Your ONE job: list ONLY what you can directly see in the frames. No
+inference, no "feels like", no atmosphere words. If a category has no
+visible evidence in any frame, return an empty array — DO NOT invent.
+
+Hard rules:
+- For every observation, prefix with the frame index it came from, like
+  "frame 3: warm tungsten pendant, bottom-right corner".
+- paletteSamples must be at least 5 specific colors actually present in
+  the frames, with hex codes drawn from real pixels (not generic
+  "warm beige"-style guesses).
+- Do not name a sound, a mood, or a music genre — those are inferred and
+  belong in pass 2.
+- Return strictly a JSON object matching the schema. No prose.
+`.trim();
+
+const SYNTHESIS_PROMPT = `
+You are the sensory analyst for a magazine called Viber. You will receive
+a JSON payload of grounded OBSERVATIONS extracted from video frames by an
+inventory tool that was forbidden to infer.
+
+Your job: synthesize a VibeObject from those observations. Cite, in the
+"plan" field at the top of your output, which observation(s) drove each
+non-trivial field decision.
+
+Hard rules:
+- Do not invent details that have no support in the observations. If
+  weather evidence is empty, set weatherImplied to "". If density evidence
+  is empty, set density to 0.5. If motion evidence is empty, set energy
+  conservatively to 0.4. If timeOfDay evidence is empty, default to
+  "afternoon".
+- Use observations.paletteSamples for the palette field. Pick 3-4 of the
+  most representative samples; reuse their hex codes verbatim.
+- Music genre, soundscape, mood: these are downstream inferences — base
+  them on lighting, props, and density evidence, but pick conservative
+  options when evidence is thin. Do not write "vibey", "aesthetic",
+  "lofi". Prefer concrete words.
+- Title: editorial magazine cover, two clauses.
+- One-liner: one sentence naming two specific anchors that appear in the
+  observations.
+
+Output strictly the JSON object. No prose.
+`.trim();
+
+type Observations = {
+  reasoning: string;
+  observations: {
+    lightSources: string[];
+    surfaces: string[];
+    props: string[];
+    timeOfDayEvidence: string[];
+    weatherEvidence: string[];
+    densityEvidence: string[];
+    motionObserved: string[];
+    paletteSamples: { name: string; hex: string }[];
+  };
+};
+
+const OBSERVATIONS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["reasoning", "observations"],
+  properties: {
+    reasoning: { type: "string" },
+    observations: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "lightSources",
+        "surfaces",
+        "props",
+        "timeOfDayEvidence",
+        "weatherEvidence",
+        "densityEvidence",
+        "motionObserved",
+        "paletteSamples",
+      ],
+      properties: {
+        lightSources: { type: "array", items: { type: "string" } },
+        surfaces: { type: "array", items: { type: "string" } },
+        props: { type: "array", items: { type: "string" } },
+        timeOfDayEvidence: { type: "array", items: { type: "string" } },
+        weatherEvidence: { type: "array", items: { type: "string" } },
+        densityEvidence: { type: "array", items: { type: "string" } },
+        motionObserved: { type: "array", items: { type: "string" } },
+        paletteSamples: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["name", "hex"],
+            properties: {
+              name: { type: "string" },
+              hex: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+// Synthesis schema = VibeObject schema with a leading "plan" string. The
+// VIBE_OBJECT_SCHEMA stays untouched in vibe-prompt.ts; we discard plan
+// after parsing.
+const VIBE_OBJECT_WITH_PLAN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["plan", ...VIBE_OBJECT_SCHEMA.required],
+  properties: {
+    plan: { type: "string" },
+    ...VIBE_OBJECT_SCHEMA.properties,
+  },
+} as const;
+
 async function callVision(framesB64: string[]): Promise<VisionDraft> {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const chain = dedupe([VISION_MODEL, ...VISION_FALLBACKS]);
+
+  const observations = await runObservationsPass(client, framesB64);
+  const totalObs =
+    observations.observations.lightSources.length +
+    observations.observations.surfaces.length +
+    observations.observations.props.length +
+    observations.observations.timeOfDayEvidence.length +
+    observations.observations.weatherEvidence.length +
+    observations.observations.densityEvidence.length +
+    observations.observations.motionObserved.length +
+    observations.observations.paletteSamples.length;
+  if (totalObs === 0) {
+    throw new Error(
+      "vision pass 1 returned zero observations across all categories — likely content filter or model issue",
+    );
+  }
+
+  return runSynthesisPass(client, observations);
+}
+
+async function runObservationsPass(
+  client: OpenAI,
+  framesB64: string[],
+): Promise<Observations> {
+  const visionModel = process.env.VIBER_VISION_MODEL || VISION_MODEL;
+  const chain = dedupe([visionModel, ...VISION_FALLBACKS]);
 
   let lastErr: unknown = null;
   for (const model of chain) {
@@ -381,13 +556,13 @@ async function callVision(framesB64: string[]): Promise<VisionDraft> {
       const resp = await client.chat.completions.create({
         model,
         messages: [
-          { role: "system", content: VIBE_EXTRACTION_PROMPT },
+          { role: "system", content: OBSERVATIONS_PROMPT },
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: `${framesB64.length} frames sampled from a video. Extract the vibe.`,
+                text: `${framesB64.length} frames sampled from a video, in chronological order (frame 0 first). Inventory only what is directly visible. Cite frame indices.`,
               },
               ...framesB64.map((b64) => ({
                 type: "image_url" as const,
@@ -399,15 +574,15 @@ async function callVision(framesB64: string[]): Promise<VisionDraft> {
         response_format: {
           type: "json_schema",
           json_schema: {
-            name: "VibeObject",
-            schema: VIBE_OBJECT_SCHEMA,
+            name: "Observations",
+            schema: OBSERVATIONS_SCHEMA,
             strict: true,
           },
         },
       });
       const content = resp.choices[0]?.message?.content;
-      if (!content) throw new Error("vision returned empty content");
-      return JSON.parse(content) as VisionDraft;
+      if (!content) throw new Error("observations pass returned empty content");
+      return JSON.parse(content) as Observations;
     } catch (e) {
       lastErr = e;
       const msg = e instanceof Error ? e.message : String(e);
@@ -415,6 +590,35 @@ async function callVision(framesB64: string[]): Promise<VisionDraft> {
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error("no vision model worked");
+}
+
+async function runSynthesisPass(
+  client: OpenAI,
+  observations: Observations,
+): Promise<VisionDraft> {
+  const resp = await client.chat.completions.create({
+    model: VISION_MODEL,
+    messages: [
+      { role: "system", content: SYNTHESIS_PROMPT },
+      {
+        role: "user",
+        content: `OBSERVATIONS (grounded inventory from frames):\n\n${JSON.stringify(observations, null, 2)}\n\nSynthesize the VibeObject. Cite which observations drove each field in the "plan" field.`,
+      },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "VibeObjectWithPlan",
+        schema: VIBE_OBJECT_WITH_PLAN_SCHEMA,
+        strict: true,
+      },
+    },
+  });
+  const content = resp.choices[0]?.message?.content;
+  if (!content) throw new Error("synthesis pass returned empty content");
+  const parsed = JSON.parse(content) as VisionDraft & { plan?: string };
+  delete parsed.plan;
+  return parsed;
 }
 
 function dedupe<T>(xs: T[]): T[] {

@@ -1,14 +1,29 @@
-// JSON sidecar persistence so vibes and inferred place vibes survive a
-// `next dev` restart. Solo build, single process, no DB.
+// Persistence dispatch. When DATABASE_URL is set we use Neon Postgres
+// via lib/db/. Otherwise we fall back to JSON sidecar files in
+// .viber/ so dev keeps working without a database. Same API in both
+// branches — callers (lib/vibe-store.ts) don't care.
 //
-// Files:
+// Files used in JSON-fallback mode:
 //   ./.viber/vibes.json         all vibes by id
 //   ./.viber/places.json        google places + their inferred vibe id
 //   ./.viber/by-url.json        youtube url -> vibeId, prevents re-extracting
+//   ./.viber/place-baselines.json   inferred vibe per google place id
 
 import { promises as fs } from "fs";
 import path from "path";
 import type { Place, VibeObject } from "./types";
+import { hasDatabase } from "./db/client";
+import {
+  dbCacheVibeIdForUrl,
+  dbGetCachedVibeIdForUrl,
+  dbListVibes,
+  dbLoadBaselines,
+  dbLoadPlaces,
+  dbLoadVibes,
+  dbSaveBaselines,
+  dbSavePlaces,
+  dbSaveVibe,
+} from "./db/repo";
 
 const dir = process.env.VIBE_DATA_DIR ?? path.join(process.cwd(), ".viber");
 
@@ -37,10 +52,23 @@ async function writeJson(name: string, data: unknown) {
 // ---------- Vibes ----------
 
 export async function loadVibes(): Promise<Record<string, VibeObject>> {
+  if (hasDatabase()) return dbLoadVibes();
   return readJson<Record<string, VibeObject>>("vibes.json", {});
 }
 
+export async function listVibes(limit = 50): Promise<VibeObject[]> {
+  if (hasDatabase()) return dbListVibes(limit);
+  const all = await loadVibes();
+  return Object.values(all)
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+    .slice(0, limit);
+}
+
 export async function saveVibeToDisk(v: VibeObject) {
+  if (hasDatabase()) {
+    await dbSaveVibe(v);
+    return;
+  }
   const all = await loadVibes();
   all[v.id] = v;
   await writeJson("vibes.json", all);
@@ -48,12 +76,19 @@ export async function saveVibeToDisk(v: VibeObject) {
 
 // ---------- URL cache ----------
 
-export async function getCachedVibeIdForUrl(url: string): Promise<string | null> {
+export async function getCachedVibeIdForUrl(
+  url: string,
+): Promise<string | null> {
+  if (hasDatabase()) return dbGetCachedVibeIdForUrl(url);
   const map = await readJson<Record<string, string>>("by-url.json", {});
   return map[url] ?? null;
 }
 
 export async function cacheVibeIdForUrl(url: string, vibeId: string) {
+  if (hasDatabase()) {
+    await dbCacheVibeIdForUrl(url, vibeId);
+    return;
+  }
   const map = await readJson<Record<string, string>>("by-url.json", {});
   map[url] = vibeId;
   await writeJson("by-url.json", map);
@@ -64,10 +99,15 @@ export async function cacheVibeIdForUrl(url: string, vibeId: string) {
 export type StoredPlace = Place & { inferredVibeId?: string };
 
 export async function loadPlaces(): Promise<Record<string, StoredPlace>> {
+  if (hasDatabase()) return dbLoadPlaces();
   return readJson<Record<string, StoredPlace>>("places.json", {});
 }
 
 export async function savePlaces(places: Record<string, StoredPlace>) {
+  if (hasDatabase()) {
+    await dbSavePlaces(places);
+    return;
+  }
   await writeJson("places.json", places);
 }
 
@@ -81,11 +121,16 @@ export type StoredBaseline = VibeObject & {
 };
 
 export async function loadBaselines(): Promise<Record<string, StoredBaseline>> {
+  if (hasDatabase()) return dbLoadBaselines();
   return readJson<Record<string, StoredBaseline>>("place-baselines.json", {});
 }
 
 export async function saveBaselines(
   baselines: Record<string, StoredBaseline>,
 ) {
+  if (hasDatabase()) {
+    await dbSaveBaselines(baselines);
+    return;
+  }
   await writeJson("place-baselines.json", baselines);
 }

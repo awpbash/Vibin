@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { getVibe, saveVibe } from "@/lib/mock-data";
+import { getVibe, saveVibe } from "@/lib/vibe-store";
 import { generatePreview } from "@/lib/generate";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+// Music + 4-clip Veo chain may run several minutes end-to-end.
+export const maxDuration = 600;
 
 export async function POST(req: Request) {
   const { vibeId } = (await req.json()) as { vibeId?: string };
@@ -11,26 +12,32 @@ export async function POST(req: Request) {
   const vibe = await getVibe(vibeId);
   if (!vibe) return new NextResponse("vibe not found", { status: 404 });
 
-  const useMock = process.env.USE_MOCK_PIPELINE !== "false";
-
-  // Already generated, return cached.
   if (vibe.generatedAssets?.previewVideoUrl) {
-    return NextResponse.json(vibe.generatedAssets);
-  }
-
-  if (useMock) {
-    // No real generation in mock mode; player renders palette gradient.
-    return NextResponse.json({ previewVideoUrl: "" });
+    return NextResponse.json({
+      previewVideoUrl: vibe.generatedAssets.previewVideoUrl,
+      durationSeconds: vibe.generatedAssets.videoDurationSeconds ?? null,
+      musicUrl: vibe.generatedAssets.musicUrl ?? null,
+      cached: true,
+    });
   }
 
   try {
     const result = await generatePreview(vibe);
     const next = {
       ...vibe,
-      generatedAssets: { previewVideoUrl: result.previewVideoUrl },
+      generatedAssets: {
+        ...(vibe.generatedAssets ?? {}),
+        previewVideoUrl: result.previewVideoUrl,
+        videoDurationSeconds: result.durationSeconds,
+      },
     };
     await saveVibe(next);
-    return NextResponse.json(result);
+    return NextResponse.json({
+      previewVideoUrl: result.previewVideoUrl,
+      durationSeconds: result.durationSeconds,
+      musicUrl: next.generatedAssets?.musicUrl ?? null,
+      cached: false,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "generate failed";
     return new NextResponse(msg, { status: 500 });

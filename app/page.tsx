@@ -113,8 +113,6 @@ function Header() {
         viber<span className="text-[var(--color-stamp)]">.</span>
       </Link>
       <div className="flex items-baseline gap-5 caption">
-        <Link href="/wizard" className="link-underline">field lab</Link>
-        <span>·</span>
         <span className="hidden sm:inline">edition no. 001</span>
         <span className="hidden sm:inline">·</span>
         <span>singapore</span>

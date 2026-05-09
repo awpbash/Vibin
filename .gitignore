@@ -9,3 +9,8 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+
+# Local data + generated assets
+.viber/
+public/uploads/
+public/generated/

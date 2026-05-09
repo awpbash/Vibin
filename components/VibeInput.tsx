@@ -45,6 +45,8 @@ export function VibeInput() {
           const fd = new FormData();
           fd.append("video", input.file);
           res = await fetch("/api/extract", { method: "POST", body: fd });
+          // The upload finished; now waiting on the model.
+          setPhase("sensing");
         } else if (input.url?.trim()) {
           setPhase("sensing");
           res = await fetch("/api/extract", {
@@ -54,7 +56,6 @@ export function VibeInput() {
           });
         } else return;
 
-        setPhase("sensing");
         if (!res.ok) throw new Error(await res.text());
         const { vibeId } = (await res.json()) as { vibeId: string };
         setPhase("done");

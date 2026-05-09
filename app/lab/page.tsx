@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 
 type Status = "idle" | "running" | "done" | "error";
 type StepResult<T = unknown> = {
@@ -81,6 +82,8 @@ export default function WizardPage() {
           <Link href="/" className="link-underline">back</Link>
         </div>
       </header>
+
+      <HealthBanner />
 
       <section className="mt-10 grid grid-cols-12 gap-10">
         <div className="col-span-12 lg:col-span-7">
@@ -174,6 +177,12 @@ export default function WizardPage() {
         </aside>
       </section>
 
+      <Suspense fallback={null}>
+        <DevOnly>
+          <TestBench />
+        </DevOnly>
+      </Suspense>
+
       <section className="mt-16 space-y-6">
         <Step
           n="01"
@@ -220,6 +229,561 @@ export default function WizardPage() {
         </section>
       ) : null}
     </main>
+  );
+}
+
+// ---------- Health banner ----------
+
+type Health = {
+  flags: Record<string, string>;
+  keys: Record<string, boolean>;
+  models: Record<string, string>;
+  tools: Record<string, boolean>;
+  venue: { lat: number; lng: number; radiusM: number };
+};
+
+function HealthBanner() {
+  const [h, setH] = useState<Health | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/health")
+      .then((r) => r.json())
+      .then(setH)
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
+  }, []);
+
+  if (err) {
+    return (
+      <div className="mt-5 px-4 py-3 border border-[var(--color-stamp)] caption text-[var(--color-stamp)]">
+        health endpoint failed: {err}
+      </div>
+    );
+  }
+  if (!h) {
+    return <div className="mt-5 caption">checking environment...</div>;
+  }
+
+  return (
+    <section
+      className="mt-5 grid grid-cols-12 gap-3 px-4 py-3 border border-[var(--color-rule)]"
+      style={{ background: "var(--color-paper-hi)" }}
+    >
+      <div className="col-span-12 md:col-span-3 flex items-baseline gap-3">
+        <span className="caption">pipeline</span>
+        <span
+          className="font-mono text-[11px] uppercase tracking-[0.18em] px-1.5 py-0.5"
+          style={{
+            background: "var(--color-stamp)",
+            color: "var(--color-paper-hi)",
+          }}
+        >
+          live
+        </span>
+        <span className="caption normal-case tracking-normal text-[var(--color-ink-faint)]">
+          calls real apis
+        </span>
+      </div>
+
+      <div className="col-span-12 md:col-span-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="caption">keys</span>
+        {Object.entries(h.keys).map(([k, ok]) => (
+          <KeyChip key={k} label={k} ok={ok} />
+        ))}
+      </div>
+
+      <div className="col-span-12 md:col-span-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 md:justify-end">
+        <span className="caption">tools</span>
+        {Object.entries(h.tools).map(([k, ok]) => (
+          <KeyChip key={k} label={k} ok={ok} />
+        ))}
+      </div>
+
+      <div className="col-span-12 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="caption">models</span>
+        {Object.entries(h.models).map(([k, v]) => (
+          <span key={k} className="caption normal-case tracking-normal">
+            <span className="text-[var(--color-ink-faint)]">{k}=</span>
+            <code className="font-mono text-[var(--color-ink)]">{v}</code>
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function KeyChip({ label, ok }: { label: string; ok: boolean }) {
+  return (
+    <span
+      className="font-mono text-[10px] tracking-[0.14em] uppercase px-1.5 py-0.5"
+      style={{
+        background: ok ? "var(--color-ink)" : "transparent",
+        color: ok ? "var(--color-paper-hi)" : "var(--color-ink-faint)",
+        border: ok ? "none" : "1px dashed var(--color-ink-faint)",
+      }}
+      title={ok ? `${label} key set` : `${label} key missing`}
+    >
+      {ok ? "✓" : "·"} {label}
+    </span>
+  );
+}
+
+// ---------- Test Bench ----------
+
+type TestState = {
+  status: Status;
+  ms?: number;
+  data?: Record<string, unknown> | null;
+  error?: string | null;
+  audioUrl?: string;
+};
+
+function TestBench() {
+  const [openai, setOpenai] = useState<TestState>({ status: "idle" });
+  const [gemini, setGemini] = useState<TestState>({ status: "idle" });
+  const [music, setMusic] = useState<TestState>({ status: "idle" });
+  const [tts, setTts] = useState<TestState>({ status: "idle" });
+
+  const [musicPreset, setMusicPreset] = useState<"tokyo" | "lisbon" | "hawker">("tokyo");
+  const [geminiPreset, setGeminiPreset] = useState<"tokyo" | "lisbon" | "hawker">("tokyo");
+  const [ttsVoice, setTtsVoice] = useState<"sarah" | "george" | "rachel" | "elli" | "adam">(
+    "sarah",
+  );
+
+  async function runOpenAi() {
+    setOpenai({ status: "running" });
+    const t0 = performance.now();
+    try {
+      const res = await fetch("/api/test/openai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      setOpenai({
+        status: res.ok && json.ok ? "done" : "error",
+        ms: Math.round(performance.now() - t0),
+        data: json,
+        error: json.error,
+      });
+    } catch (e) {
+      setOpenai({
+        status: "error",
+        ms: Math.round(performance.now() - t0),
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  async function runGemini() {
+    setGemini({ status: "running" });
+    const t0 = performance.now();
+    try {
+      const res = await fetch("/api/test/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preset: geminiPreset, durationSec: 30 }),
+      });
+      const json = await res.json();
+      setGemini({
+        status: res.ok && json.ok ? "done" : "error",
+        ms: Math.round(performance.now() - t0),
+        data: json,
+        error: json.error,
+      });
+    } catch (e) {
+      setGemini({
+        status: "error",
+        ms: Math.round(performance.now() - t0),
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  async function runMusic() {
+    setMusic({ status: "running" });
+    const t0 = performance.now();
+    try {
+      const res = await fetch("/api/test/elevenlabs-music", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preset: musicPreset, lengthMs: 30000 }),
+      });
+      const json = await res.json();
+      setMusic({
+        status: res.ok && json.ok ? "done" : "error",
+        ms: Math.round(performance.now() - t0),
+        data: json,
+        error: json.error,
+        audioUrl: json.audioUrl,
+      });
+    } catch (e) {
+      setMusic({
+        status: "error",
+        ms: Math.round(performance.now() - t0),
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  async function runTts() {
+    setTts({ status: "running" });
+    const t0 = performance.now();
+    try {
+      const res = await fetch("/api/test/elevenlabs-tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voicePreset: ttsVoice }),
+      });
+      const json = await res.json();
+      setTts({
+        status: res.ok && json.ok ? "done" : "error",
+        ms: Math.round(performance.now() - t0),
+        data: json,
+        error: json.error,
+        audioUrl: json.audioUrl,
+      });
+    } catch (e) {
+      setTts({
+        status: "error",
+        ms: Math.round(performance.now() - t0),
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  return (
+    <section className="mt-16">
+      <div className="flex items-baseline justify-between mb-6">
+        <div className="flex items-baseline gap-3">
+          <span className="font-mono text-[10px] tabular-nums tracking-[0.22em] text-[var(--color-ink-faint)]">
+            00.
+          </span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--color-ink-mute)]">
+            test bench
+          </span>
+        </div>
+        <span className="caption">verify your keys before running the pipeline</span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+        <TestCard
+          title="openai vision"
+          subtitle={String(openai.data?.model ?? "gpt-5.4-mini")}
+          endpoint="POST /api/test/openai"
+          state={openai}
+          actions={
+            <button
+              onClick={runOpenAi}
+              disabled={openai.status === "running"}
+              className="caption-btn"
+            >
+              {openai.status === "running" ? "calling..." : "run sample"}
+            </button>
+          }
+        >
+          {openai.data?.response ? (
+            <p className="display-italic text-[18px] leading-[1.5] text-[var(--color-ink)] mt-3">
+              {String(openai.data.response)}
+            </p>
+          ) : null}
+          {openai.data?.cost ? (
+            <CostFooter usage={openai.data.usage as Record<string, unknown>} cost={openai.data.cost as Record<string, number>} />
+          ) : null}
+        </TestCard>
+
+        <TestCard
+          title="gemini audio"
+          subtitle="gemini-2.5-flash"
+          endpoint="POST /api/test/gemini"
+          state={gemini}
+          actions={
+            <div className="flex items-baseline gap-3 flex-wrap">
+              {(["tokyo", "lisbon", "hawker"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setGeminiPreset(p)}
+                  disabled={gemini.status === "running"}
+                  className={`caption ${
+                    geminiPreset === p
+                      ? "text-[var(--color-stamp)]"
+                      : "text-[var(--color-ink-mute)]"
+                  } hover:text-[var(--color-stamp)] disabled:opacity-40`}
+                >
+                  {p}
+                </button>
+              ))}
+              <span className="ml-auto" />
+              <button
+                onClick={runGemini}
+                disabled={gemini.status === "running"}
+                className="caption-btn"
+              >
+                {gemini.status === "running" ? "listening..." : "analyze 30s"}
+              </button>
+            </div>
+          }
+        >
+          <GeminiAudioReadout data={gemini.data} />
+        </TestCard>
+
+        <TestCard
+          title="elevenlabs music"
+          subtitle="eleven-music"
+          endpoint="POST /api/test/elevenlabs-music"
+          state={music}
+          actions={
+            <div className="flex items-baseline gap-3 flex-wrap">
+              {(["tokyo", "lisbon", "hawker"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setMusicPreset(p)}
+                  disabled={music.status === "running"}
+                  className={`caption ${
+                    musicPreset === p
+                      ? "text-[var(--color-stamp)]"
+                      : "text-[var(--color-ink-mute)]"
+                  } hover:text-[var(--color-stamp)] disabled:opacity-40`}
+                >
+                  {p}
+                </button>
+              ))}
+              <span className="ml-auto" />
+              <button
+                onClick={runMusic}
+                disabled={music.status === "running"}
+                className="caption-btn"
+              >
+                {music.status === "running" ? "composing..." : "compose 30s"}
+              </button>
+            </div>
+          }
+        >
+          {music.audioUrl ? (
+            <div className="mt-4">
+              <audio controls src={music.audioUrl} className="w-full" />
+              <p className="caption mt-2">{music.audioUrl}</p>
+            </div>
+          ) : null}
+        </TestCard>
+
+        <TestCard
+          title="elevenlabs tts"
+          subtitle={
+            (process.env.NEXT_PUBLIC_ELEVENLABS_MODEL_ID as string) ||
+            "eleven_multilingual_v2"
+          }
+          endpoint="POST /api/test/elevenlabs-tts"
+          state={tts}
+          actions={
+            <div className="flex items-baseline gap-3 flex-wrap">
+              {(["sarah", "george", "rachel", "elli", "adam"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setTtsVoice(v)}
+                  disabled={tts.status === "running"}
+                  className={`caption ${
+                    ttsVoice === v
+                      ? "text-[var(--color-stamp)]"
+                      : "text-[var(--color-ink-mute)]"
+                  } hover:text-[var(--color-stamp)] disabled:opacity-40`}
+                >
+                  {v}
+                </button>
+              ))}
+              <span className="ml-auto" />
+              <button
+                onClick={runTts}
+                disabled={tts.status === "running"}
+                className="caption-btn"
+              >
+                {tts.status === "running" ? "speaking..." : "speak sample"}
+              </button>
+            </div>
+          }
+        >
+          {tts.audioUrl ? (
+            <div className="mt-4">
+              <audio controls src={tts.audioUrl} className="w-full" />
+              <p className="caption mt-2">{tts.audioUrl}</p>
+            </div>
+          ) : null}
+        </TestCard>
+      </div>
+    </section>
+  );
+}
+
+function CostFooter({
+  usage,
+  cost,
+}: {
+  usage: Record<string, unknown>;
+  cost: Record<string, number>;
+}) {
+  const fmt = (n: number) =>
+    n === 0
+      ? "$0"
+      : n < 0.01
+      ? `$${n.toFixed(4)}`
+      : n < 1
+      ? `$${n.toFixed(3)}`
+      : `$${n.toFixed(2)}`;
+  return (
+    <div className="mt-4 grid grid-cols-12 gap-x-3 gap-y-1 caption text-[var(--color-ink-mute)] border-t border-dotted border-[var(--color-rule-soft)] pt-3">
+      <div className="col-span-6">
+        <span className="tracking-[0.18em]">tokens</span>
+        <span className="ml-2 font-mono normal-case tracking-normal text-[var(--color-ink)]">
+          {String(usage.prompt_tokens ?? 0)} in
+        </span>
+        <span className="ml-2 font-mono normal-case tracking-normal text-[var(--color-ink)]">
+          / {String(usage.completion_tokens ?? 0)} out
+        </span>
+      </div>
+      <div className="col-span-6 text-right">
+        <span className="tracking-[0.18em]">cost</span>
+        <span className="ml-2 font-mono normal-case tracking-normal text-[var(--color-stamp)]">
+          {fmt(cost.usdTotal ?? 0)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function GeminiAudioReadout({ data }: { data?: Record<string, unknown> | null }) {
+  if (!data) return null;
+  const a = data.analysis as
+    | {
+        hasMusic?: boolean;
+        genre?: string;
+        tempoBpm?: number;
+        key?: string;
+        instruments?: string[];
+        ambientLayers?: string[];
+        audioMood?: string[];
+        musicalCharacter?: string;
+      }
+    | undefined;
+  const stages = (data.stages as Array<{ name: string; ms: number }>) ?? [];
+  const cost = (data.estCostUsd as number) ?? 0;
+  if (!a) return null;
+
+  const fmtCost = (n: number) =>
+    n === 0 ? "$0" : n < 0.01 ? `$${n.toFixed(5)}` : `$${n.toFixed(3)}`;
+
+  return (
+    <div className="mt-4 space-y-3">
+      <p className="display-italic text-[18px] leading-[1.45]">
+        {a.musicalCharacter ?? "—"}
+      </p>
+
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 caption text-[var(--color-ink-mute)]">
+        <dt className="tracking-[0.18em]">music</dt>
+        <dd className="font-mono normal-case tracking-normal text-[var(--color-ink)]">
+          {a.hasMusic ? "yes" : "no"}
+        </dd>
+        <dt className="tracking-[0.18em]">genre</dt>
+        <dd className="font-mono normal-case tracking-normal text-[var(--color-ink)]">
+          {a.genre ?? "—"}
+        </dd>
+        <dt className="tracking-[0.18em]">tempo</dt>
+        <dd className="font-mono normal-case tracking-normal text-[var(--color-ink)]">
+          {a.tempoBpm ? `${a.tempoBpm} bpm` : "—"}
+        </dd>
+        <dt className="tracking-[0.18em]">key</dt>
+        <dd className="font-mono normal-case tracking-normal text-[var(--color-ink)]">
+          {a.key ?? "—"}
+        </dd>
+      </dl>
+
+      {a.instruments?.length ? (
+        <p className="caption">
+          <span className="tracking-[0.18em]">instruments</span>{" "}
+          <span className="normal-case tracking-normal text-[var(--color-ink)]">
+            {a.instruments.join(", ")}
+          </span>
+        </p>
+      ) : null}
+
+      {a.ambientLayers?.length ? (
+        <p className="caption">
+          <span className="tracking-[0.18em]">ambient</span>{" "}
+          <span className="normal-case tracking-normal text-[var(--color-ink)]">
+            {a.ambientLayers.join(", ")}
+          </span>
+        </p>
+      ) : null}
+
+      {a.audioMood?.length ? (
+        <p className="caption">
+          <span className="tracking-[0.18em]">mood</span>{" "}
+          <span className="normal-case tracking-normal text-[var(--color-ink)]">
+            {a.audioMood.join(", ")}
+          </span>
+        </p>
+      ) : null}
+
+      <div className="border-t border-dotted border-[var(--color-rule-soft)] pt-3 grid grid-cols-12 gap-x-3 caption text-[var(--color-ink-mute)]">
+        <div className="col-span-7 flex flex-wrap gap-x-3">
+          {stages.map((s) => (
+            <span key={s.name} className="font-mono normal-case tracking-normal">
+              <span className="text-[var(--color-ink-faint)]">{s.name}</span>{" "}
+              <span className="text-[var(--color-ink)]">{s.ms}ms</span>
+            </span>
+          ))}
+        </div>
+        <div className="col-span-5 text-right">
+          <span className="tracking-[0.18em]">cost</span>{" "}
+          <span className="font-mono normal-case tracking-normal text-[var(--color-stamp)]">
+            {fmtCost(cost)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TestCard({
+  title,
+  subtitle,
+  endpoint,
+  state,
+  actions,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  endpoint: string;
+  state: TestState;
+  actions?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <article
+      className="border border-[var(--color-rule)] bg-[var(--color-paper-hi)] p-5"
+      style={{ boxShadow: "var(--shadow-card)" }}
+    >
+      <header className="flex items-baseline justify-between gap-3 mb-2">
+        <h3 className="display-md text-[22px]">{title}</h3>
+        <StatusBadge status={state.status} ms={state.ms} />
+      </header>
+      <p className="caption mb-4">
+        <code className="font-mono">{endpoint}</code>
+        <span className="ml-3 text-[var(--color-ink-faint)] normal-case tracking-normal">
+          {subtitle}
+        </span>
+      </p>
+
+      <div className="space-y-3">{actions}</div>
+
+      {state.error ? (
+        <pre className="mt-3 font-mono text-[12px] text-[var(--color-stamp-ink)] whitespace-pre-wrap">
+          {state.error}
+        </pre>
+      ) : null}
+
+      {children}
+    </article>
   );
 }
 

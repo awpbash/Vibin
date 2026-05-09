@@ -6,9 +6,9 @@ import OpenAI from "openai";
 import type { Place, VibeObject } from "./types";
 import { cosine } from "./search";
 import { PLACE_BASELINE_PROMPT, VIBE_OBJECT_SCHEMA } from "./vibe-prompt";
-import { loadPlaces, savePlaces } from "./persist";
+import { loadBaselines, saveBaselines } from "./persist";
 
-const VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5.5";
+const VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5.4-mini";
 const EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-large";
 
 const VENUE_LAT = parseFloat(process.env.VIBER_VENUE_LAT ?? "1.3018");
@@ -132,7 +132,15 @@ async function searchNearby(): Promise<GooglePlace[]> {
   return data.places ?? [];
 }
 
+// Public-facing URL: routed through our server proxy so the Maps API key
+// never reaches the browser. The proxy strips the key and signs the upstream
+// fetch server-side.
 function placePhotoUrl(name: string, maxHeightPx = 1024): string {
+  return `/api/place-photo?name=${encodeURIComponent(name)}&h=${maxHeightPx}`;
+}
+
+// Private upstream URL used only by the server proxy.
+export function upstreamPhotoUrl(name: string, maxHeightPx = 1024): string {
   return `https://places.googleapis.com/v1/${name}/media?maxHeightPx=${maxHeightPx}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
 }
 
@@ -262,8 +270,7 @@ async function generateWhy(query: VibeObject, place: VibeObject): Promise<string
           content: `Query vibe:\n${vibeEmbedSource(query)}\n\nPlace vibe:\n${vibeEmbedSource(place)}\n\nWrite the sentence.`,
         },
       ],
-      max_tokens: 80,
-      temperature: 0.7,
+      max_completion_tokens: 200,
     });
     return resp.choices[0]?.message?.content?.trim() ?? place.oneLiner;
   } catch {
@@ -335,14 +342,9 @@ async function hydrateCache() {
   if (cacheHydrated) return;
   cacheHydrated = true;
   try {
-    const stored = await loadPlaces();
-    for (const [key, p] of Object.entries(stored)) {
-      if (p.inferredVibeId && p.id) {
-        // The stored place includes the inferred vibe id pointer.
-        // Real baseline rehydration is deferred; for now we only cache
-        // freshly computed baselines within the process.
-        void key;
-      }
+    const stored = await loadBaselines();
+    for (const [k, b] of Object.entries(stored)) {
+      cache.set(k, b);
     }
   } catch {
     // ignore
@@ -351,26 +353,41 @@ async function hydrateCache() {
 
 async function persistCache() {
   try {
-    const stored = await loadPlaces();
+    const stored = await loadBaselines();
     cache.forEach((v, k) => {
-      stored[k] = {
-        id: k,
-        googlePlaceId: k,
-        name: v.title,
-        address: "",
-        neighbourhood: "",
-        distanceMeters: 0,
-        walkMinutes: 0,
-        rating: 0,
-        photoUrl: "",
-        matchScore: 0,
-        whyThisMatches: v.oneLiner,
-        location: { lat: VENUE_LAT, lng: VENUE_LNG },
-        inferredVibeId: v.id,
-      };
+      stored[k] = v;
     });
-    await savePlaces(stored);
+    await saveBaselines(stored);
   } catch {
     // ignore
   }
 }
+
+// Public seed helper: pre-warm the baseline cache for the venue (used by
+// scripts/seed-places.ts so the demo doesn't pay OpenAI on stage).
+export async function seedVenueBaselines(): Promise<{
+  total: number;
+  newlyInferred: number;
+  cached: number;
+}> {
+  await hydrateCache();
+  const candidates = await searchNearby();
+  let newlyInferred = 0;
+  let cached = 0;
+  for (const gp of candidates) {
+    if (cache.has(gp.id)) {
+      cached++;
+      continue;
+    }
+    try {
+      const baseline = await inferBaseline(gp);
+      cache.set(gp.id, baseline);
+      newlyInferred++;
+    } catch {
+      // skip on failure; next run will retry
+    }
+  }
+  await persistCache();
+  return { total: candidates.length, newlyInferred, cached };
+}
+

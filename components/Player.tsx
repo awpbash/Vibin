@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApplyPalette } from "@/components/ApplyPalette";
 import type { VibeObject } from "@/lib/types";
 
-const TOTAL = 90; // seconds. Preview length.
+const FALLBACK_TOTAL = 90; // seconds. Used only when no <video> is present.
 
 export function Player({
   vibe,
@@ -16,38 +16,59 @@ export function Player({
 }) {
   const [playing, setPlaying] = useState(true);
   const [t, setT] = useState(0);
-  const ref = useRef<number | null>(null);
-  const startRef = useRef<number>(0);
-  const pausedAt = useRef<number>(0);
+  const [duration, setDuration] = useState(FALLBACK_TOTAL);
+  const rafRef = useRef<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  // Drive timer either from the actual <video> currentTime or, when no video
+  // is present, from a synthetic clock used for the gradient animation only.
   useEffect(() => {
-    if (!playing) {
-      pausedAt.current = t;
-      if (ref.current) cancelAnimationFrame(ref.current);
-      return;
-    }
-    startRef.current = performance.now();
+    let last = performance.now();
     const tick = (now: number) => {
-      const elapsed = pausedAt.current + (now - startRef.current) / 1000;
-      if (elapsed >= TOTAL) {
-        setT(TOTAL);
-        setPlaying(false);
-        return;
+      const dt = (now - last) / 1000;
+      last = now;
+      const v = videoRef.current;
+      if (v && previewUrl) {
+        setT(v.currentTime);
+        if (v.duration && Number.isFinite(v.duration)) setDuration(v.duration);
+        if (!v.paused) {
+          rafRef.current = requestAnimationFrame(tick);
+          return;
+        }
+      } else if (playing) {
+        setT((prev) => {
+          const next = prev + dt;
+          if (next >= FALLBACK_TOTAL) {
+            setPlaying(false);
+            return FALLBACK_TOTAL;
+          }
+          return next;
+        });
       }
-      setT(elapsed);
-      ref.current = requestAnimationFrame(tick);
+      rafRef.current = requestAnimationFrame(tick);
     };
-    ref.current = requestAnimationFrame(tick);
+    rafRef.current = requestAnimationFrame(tick);
     return () => {
-      if (ref.current) cancelAnimationFrame(ref.current);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [playing, t]);
+  }, [playing, previewUrl]);
+
+  // Sync video play state when toggled.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (playing) v.play().catch(() => setPlaying(false));
+    else v.pause();
+  }, [playing]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.code === "Space") {
         e.preventDefault();
         setPlaying((p) => !p);
+      } else if (e.code === "Escape") {
+        e.preventDefault();
+        history.back();
       }
     }
     window.addEventListener("keydown", onKey);
@@ -55,7 +76,7 @@ export function Player({
   }, []);
 
   const paletteHexes = vibe.palette.map((c) => c.hex);
-  const progress = (t / TOTAL) * 100;
+  const progress = duration > 0 ? Math.min(100, (t / duration) * 100) : 0;
   const c0 = paletteHexes[0] ?? "#1a1d1a";
   const c1 = paletteHexes[1] ?? "#2a2d2a";
   const c2 = paletteHexes[2] ?? "#1a1d1a";
@@ -71,11 +92,15 @@ export function Player({
 
       {previewUrl ? (
         <video
+          ref={videoRef}
           src={previewUrl}
           autoPlay
           loop
-          muted={false}
           playsInline
+          onLoadedMetadata={(e) => {
+            const d = e.currentTarget.duration;
+            if (Number.isFinite(d)) setDuration(d);
+          }}
           className="absolute inset-0 w-full h-full object-cover"
         />
       ) : null}
@@ -92,7 +117,7 @@ export function Player({
             radial-gradient(ellipse 40% 30% at 30% 70%, ${c3}55 0%, transparent 55%),
             #0e0f0e
           `,
-          transform: `scale(${1 + (t / TOTAL) * 0.18})`,
+          transform: `scale(${1 + (t / Math.max(duration, 1)) * 0.18})`,
           transformOrigin: "55% 50%",
           transition: "transform 250ms linear, opacity 600ms ease",
         }}
@@ -144,7 +169,7 @@ export function Player({
         <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#e9dcc6]/60 flex items-baseline gap-4">
           <span>now playing</span>
           <span className="tabular-nums">
-            {fmt(t)} / {fmt(TOTAL)}
+            {fmt(t)} / {fmt(duration)}
           </span>
         </div>
       </div>

@@ -70,3 +70,22 @@ export async function loadPlaces(): Promise<Record<string, StoredPlace>> {
 export async function savePlaces(places: Record<string, StoredPlace>) {
   await writeJson("places.json", places);
 }
+
+// ---------- Place baseline vibes ----------
+// Keyed by Google Place id. Stores the full inferred VibeObject + cachedAt
+// so cold starts can rehydrate without re-hitting OpenAI.
+
+export type StoredBaseline = VibeObject & {
+  googlePlaceId: string;
+  cachedAt: number;
+};
+
+export async function loadBaselines(): Promise<Record<string, StoredBaseline>> {
+  return readJson<Record<string, StoredBaseline>>("place-baselines.json", {});
+}
+
+export async function saveBaselines(
+  baselines: Record<string, StoredBaseline>,
+) {
+  await writeJson("place-baselines.json", baselines);
+}

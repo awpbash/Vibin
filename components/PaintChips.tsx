@@ -7,10 +7,7 @@ export function PaintChips({ palette }: { palette: VibeObject["palette"] }) {
         <article
           key={c.hex}
           className="reveal"
-          style={{
-            animationDelay: `${200 + i * 80}ms`,
-            transform: `rotate(${(i % 2 === 0 ? -1 : 1) * (0.4 + i * 0.15)}deg)`,
-          }}
+          style={{ animationDelay: `${200 + i * 80}ms` }}
         >
           <div
             className="paint-chip aspect-[4/5]"

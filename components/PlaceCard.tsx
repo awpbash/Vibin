@@ -2,32 +2,22 @@ import Image from "next/image";
 import type { Place } from "@/lib/types";
 
 export function PlaceCard({ place, index }: { place: Place; index: number }) {
-  const tilt = index % 2 === 0 ? -1.2 : 1.4;
+  const directionsHref = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+    place.name + " " + place.address,
+  )}${place.googlePlaceId ? `&destination_place_id=${place.googlePlaceId}` : ""}`;
   return (
     <article
       className="relative reveal"
-      style={{
-        animationDelay: `${index * 140 + 500}ms`,
-        transform: `rotate(${tilt}deg)`,
-      }}
+      style={{ animationDelay: `${index * 140 + 500}ms` }}
     >
-      <div
-        className="bg-[var(--color-paper-hi)] p-4"
+      <a
+        href={directionsHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block bg-[var(--color-paper-hi)] p-4 transition-shadow hover:shadow-[var(--shadow-paper)]"
         style={{ boxShadow: "var(--shadow-card)" }}
+        aria-label={`Open directions to ${place.name}`}
       >
-        <span
-          className="tape"
-          style={{
-            top: -10,
-            left: index % 2 === 0 ? 30 : "auto",
-            right: index % 2 === 0 ? "auto" : 30,
-            width: 78,
-            height: 18,
-            transform: `rotate(${index % 2 === 0 ? -6 : 5}deg)`,
-          }}
-          aria-hidden
-        />
-
         <div className="grid grid-cols-12 gap-4">
           <div className="col-span-5 relative aspect-[4/5] overflow-hidden bg-[var(--color-paper-shadow)]">
             <Image
@@ -73,11 +63,18 @@ export function PlaceCard({ place, index }: { place: Place; index: number }) {
             </p>
           </div>
         </div>
-      </div>
+      </a>
 
       <div className="mt-2 flex items-baseline justify-between caption px-1">
         <span>{place.address.toLowerCase()}</span>
-        <span className="link-underline cursor-pointer">directions</span>
+        <a
+          href={directionsHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="link-underline"
+        >
+          directions ↗
+        </a>
       </div>
     </article>
   );

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getVibe } from "@/lib/mock-data";
+import { getVibe } from "@/lib/vibe-store";
 import { Player } from "@/components/Player";
 
 export default async function PlayPage({

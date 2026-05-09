@@ -46,31 +46,8 @@ export function NearbyMap({ places }: { places: Place[] }) {
           background: "var(--color-paper-hi)",
           boxShadow: "var(--shadow-paper)",
           padding: 18,
-          transform: "rotate(-0.4deg)",
         }}
       >
-        <span
-          className="tape"
-          style={{
-            top: -12,
-            left: 28,
-            width: 110,
-            height: 22,
-            transform: "rotate(-4deg)",
-          }}
-          aria-hidden
-        />
-        <span
-          className="tape"
-          style={{
-            top: -10,
-            right: 36,
-            width: 86,
-            height: 20,
-            transform: "rotate(6deg)",
-          }}
-          aria-hidden
-        />
 
         <div
           className="relative w-full h-full overflow-hidden"

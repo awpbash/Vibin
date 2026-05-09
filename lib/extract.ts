@@ -8,24 +8,60 @@ import { promises as fs } from "fs";
 import path from "path";
 import OpenAI from "openai";
 import { VIBE_EXTRACTION_PROMPT, VIBE_OBJECT_SCHEMA } from "./vibe-prompt";
-import type { VibeObject } from "./types";
+import { analyzeAudio } from "./gemini-audio";
+import type { AudioAnalysis, VibeObject } from "./types";
 
-const VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5.5";
+const VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5.4-mini";
 const EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-large";
+// Sample at FRAME_FPS frames per second of source video, capped at
+// FRAME_MAX_COUNT frames total so a long clip doesn't blow up vision
+// token cost. A 30s clip at 1 fps = 30 frames, a 5min clip caps at
+// the max. Override either via env if needed.
+const FRAME_FPS = parseFloat(process.env.VIBER_FRAME_FPS ?? "1");
+const FRAME_MAX_COUNT = parseInt(
+  process.env.VIBER_FRAME_MAX_COUNT ??
+    process.env.VIBER_FRAME_COUNT ??
+    "24",
+  10,
+);
+const FRAME_WIDTH = parseInt(process.env.VIBER_FRAME_WIDTH ?? "768", 10);
+
+// Fallback chain: try cheaper models first if the configured one isn't
+// available. Keeps the demo running even if the coupon doesn't unlock 5.5.
+const VISION_FALLBACKS = [
+  "gpt-5.4-mini",
+  "gpt-5-mini",
+  "gpt-4o-mini",
+  "gpt-4o",
+];
 
 type ExtractInput =
   | { kind: "youtube"; url: string }
-  | { kind: "upload"; videoPath: string; originalName?: string };
+  | {
+      kind: "upload";
+      videoPath: string;
+      originalName?: string;
+      previewUrl?: string;       // public web url to play the clip back
+      contentType?: string;
+    };
 
 export async function extractFromYouTube(url: string): Promise<VibeObject> {
   return extract({ kind: "youtube", url });
 }
 
-export async function extractFromUpload(
-  videoPath: string,
-  originalName?: string,
-): Promise<VibeObject> {
-  return extract({ kind: "upload", videoPath, originalName });
+export async function extractFromUpload(opts: {
+  videoPath: string;
+  originalName?: string;
+  previewUrl?: string;
+  contentType?: string;
+}): Promise<VibeObject> {
+  return extract({
+    kind: "upload",
+    videoPath: opts.videoPath,
+    originalName: opts.originalName,
+    previewUrl: opts.previewUrl,
+    contentType: opts.contentType,
+  });
 }
 
 async function extract(input: ExtractInput): Promise<VibeObject> {
@@ -47,8 +83,41 @@ async function extract(input: ExtractInput): Promise<VibeObject> {
     }
 
     const duration = await ffprobeDuration(videoPath);
-    const frames = await sampleFrames(videoPath, tmp, 8, duration);
-    const draft = await callVision(frames);
+
+    // Frame count = duration × fps, capped. 1 fps default with a 24-
+    // frame ceiling means a 30s phone clip gets dense coverage and a
+    // 5-minute YouTube doesn't blow up vision tokens.
+    const targetFrameCount = Math.min(
+      FRAME_MAX_COUNT,
+      Math.max(1, Math.ceil(duration * FRAME_FPS)),
+    );
+
+    // Vision and audio in parallel — independent, both optional-failure.
+    const [draft, audioResult] = await Promise.all([
+      sampleFrames(videoPath, tmp, targetFrameCount, duration).then(callVision),
+      runAudioAnalysis(videoPath, tmp, duration, id),
+    ]);
+
+    const audioAnalysis = audioResult?.analysis;
+
+    // Audio overrides the vision-guessed musicAnchor when music is present,
+    // and ambient room sounds get merged into the soundscape.
+    if (audioAnalysis) {
+      if (audioAnalysis.hasMusic) {
+        draft.musicAnchor = {
+          genre: audioAnalysis.genre || draft.musicAnchor.genre,
+          tempoBpm: audioAnalysis.tempoBpm || draft.musicAnchor.tempoBpm,
+          key: audioAnalysis.key || draft.musicAnchor.key,
+          referenceTrack: draft.musicAnchor.referenceTrack,
+        };
+      }
+      if (audioAnalysis.ambientLayers.length) {
+        draft.soundscape = dedupeStrings([
+          ...audioAnalysis.ambientLayers,
+          ...draft.soundscape,
+        ]).slice(0, 6);
+      }
+    }
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     let embedding: number[] | undefined;
@@ -64,8 +133,20 @@ async function extract(input: ExtractInput): Promise<VibeObject> {
 
     const source: VibeObject["source"] =
       input.kind === "youtube"
-        ? { kind: "youtube", url: input.url }
-        : { kind: "capture" };
+        ? {
+            kind: "youtube",
+            url: input.url,
+            previewUrl: youtubeEmbedUrl(input.url),
+            audioSampleUrl: audioResult?.sampleUrl,
+            durationSeconds: Math.round(duration),
+          }
+        : {
+            kind: "capture",
+            previewUrl: input.previewUrl,
+            audioSampleUrl: audioResult?.sampleUrl,
+            contentType: input.contentType,
+            durationSeconds: Math.round(duration),
+          };
 
     return {
       id,
@@ -84,6 +165,7 @@ async function extract(input: ExtractInput): Promise<VibeObject> {
       musicAnchor: draft.musicAnchor,
       moodTags: draft.moodTags,
       embedding,
+      audioAnalysis,
       createdAt: Date.now(),
     };
   } finally {
@@ -164,6 +246,96 @@ async function sampleFrames(
   return frames;
 }
 
+// Pulls a 30s mono mp3 from the middle of the source video, persists
+// it to public/uploads so it's a real artefact, and asks Gemini 3
+// Flash to break it down. All failures are non-fatal — extraction
+// continues with a vision-only vibe if audio analysis breaks.
+async function runAudioAnalysis(
+  videoPath: string,
+  tmp: string,
+  duration: number,
+  vibeId: string,
+): Promise<{ analysis: AudioAnalysis; sampleUrl: string } | undefined> {
+  if (!process.env.GEMINI_API_KEY) return undefined;
+  try {
+    const tmpAudio = path.join(tmp, "audio.mp3");
+    const start = Math.max(0, duration / 2 - 15);
+    const dur = Math.min(30, Math.max(4, duration));
+    await ffmpegAudio(videoPath, tmpAudio, start, dur);
+    const buf = await fs.readFile(tmpAudio);
+
+    // Persist the sample so it survives tmp cleanup and is playable.
+    // This is the canonical "what does this place actually sound like"
+    // artefact — the music generator's prompt anchors on its analysis.
+    const publicDir = path.join(process.cwd(), "public", "uploads");
+    await fs.mkdir(publicDir, { recursive: true });
+    const sampleName = `${vibeId}-source-sample.mp3`;
+    await fs.writeFile(path.join(publicDir, sampleName), buf);
+
+    const analysis = await analyzeAudio(buf.toString("base64"), "audio/mp3");
+    return { analysis, sampleUrl: `/uploads/${sampleName}` };
+  } catch (e) {
+    console.error("audio analysis failed:", e);
+    return undefined;
+  }
+}
+
+function ffmpegAudio(
+  input: string,
+  out: string,
+  startSec: number,
+  durSec: number,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const p = spawn(
+      "ffmpeg",
+      [
+        "-y",
+        "-ss",
+        String(startSec),
+        "-i",
+        input,
+        "-t",
+        String(durSec),
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-acodec",
+        "libmp3lame",
+        "-b:a",
+        "96k",
+        out,
+      ],
+      { stdio: ["ignore", "ignore", "pipe"] },
+    );
+    let err = "";
+    p.stderr.on("data", (d) => (err += d.toString()));
+    p.on("error", (e) =>
+      reject(new Error(`ffmpeg not installed: ${e.message}`)),
+    );
+    p.on("close", (code) =>
+      code === 0
+        ? resolve()
+        : reject(new Error(`ffmpeg audio exit ${code}: ${err.slice(-400)}`)),
+    );
+  });
+}
+
+function dedupeStrings(xs: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of xs) {
+    const k = x.trim().toLowerCase();
+    if (!seen.has(k)) {
+      seen.add(k);
+      out.push(x.trim());
+    }
+  }
+  return out;
+}
+
 function ffmpegFrame(input: string, t: number, out: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const p = spawn(
@@ -177,9 +349,9 @@ function ffmpegFrame(input: string, t: number, out: string): Promise<void> {
         "-frames:v",
         "1",
         "-q:v",
-        "3",
+        "5",
         "-vf",
-        "scale=1280:-1",
+        `scale=${FRAME_WIDTH}:-2`,
         out,
       ],
       { stdio: ["ignore", "ignore", "pipe"] },
@@ -201,37 +373,63 @@ type VisionDraft = Omit<VibeObject, "id" | "source" | "createdAt" | "embedding">
 
 async function callVision(framesB64: string[]): Promise<VisionDraft> {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const resp = await client.chat.completions.create({
-    model: VISION_MODEL,
-    messages: [
-      { role: "system", content: VIBE_EXTRACTION_PROMPT },
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "Eight frames sampled from a video. Extract the vibe.",
-          },
-          ...framesB64.map((b64) => ({
-            type: "image_url" as const,
-            image_url: { url: `data:image/jpeg;base64,${b64}` },
-          })),
-        ],
-      },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "VibeObject",
-        schema: VIBE_OBJECT_SCHEMA,
-        strict: true,
-      },
-    },
-  });
+  const chain = dedupe([VISION_MODEL, ...VISION_FALLBACKS]);
 
-  const content = resp.choices[0]?.message?.content;
-  if (!content) throw new Error("vision returned empty content");
-  return JSON.parse(content) as VisionDraft;
+  let lastErr: unknown = null;
+  for (const model of chain) {
+    try {
+      const resp = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: VIBE_EXTRACTION_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `${framesB64.length} frames sampled from a video. Extract the vibe.`,
+              },
+              ...framesB64.map((b64) => ({
+                type: "image_url" as const,
+                image_url: { url: `data:image/jpeg;base64,${b64}` },
+              })),
+            ],
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "VibeObject",
+            schema: VIBE_OBJECT_SCHEMA,
+            strict: true,
+          },
+        },
+      });
+      const content = resp.choices[0]?.message?.content;
+      if (!content) throw new Error("vision returned empty content");
+      return JSON.parse(content) as VisionDraft;
+    } catch (e) {
+      lastErr = e;
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/model.*does not exist|not found|invalid model|404/i.test(msg)) throw e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("no vision model worked");
+}
+
+function dedupe<T>(xs: T[]): T[] {
+  const seen = new Set<T>();
+  const out: T[] = [];
+  for (const x of xs) if (!seen.has(x)) { seen.add(x); out.push(x); }
+  return out;
+}
+
+function youtubeEmbedUrl(url: string): string {
+  const m = /[?&]v=([^&]+)|youtu\.be\/([^?&]+)|youtube\.com\/embed\/([^?&]+)/.exec(
+    url,
+  );
+  const id = m?.[1] ?? m?.[2] ?? m?.[3];
+  return id ? `https://www.youtube.com/embed/${id}` : url;
 }
 
 function embedSource(d: VisionDraft): string {

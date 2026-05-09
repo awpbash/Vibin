@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getVibe, getPlacesForVibe } from "@/lib/mock-data";
+import { getVibe, getPlacesForVibe } from "@/lib/vibe-store";
 
 export async function GET(
   _req: Request,

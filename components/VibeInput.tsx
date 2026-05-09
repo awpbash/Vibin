@@ -3,27 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { StampButton } from "./StampButton";
-
-const SAMPLES: Array<{ label: string; url: string; thumb: string }> = [
-  {
-    label: "tokyo coffee shop",
-    url: "https://www.youtube.com/watch?v=dx9aDku80kM",
-    thumb:
-      "https://images.unsplash.com/photo-1453614512568-c4024d13c247?auto=format&fit=crop&w=240&q=70",
-  },
-  {
-    label: "lisbon jazz bar",
-    url: "https://www.youtube.com/watch?v=lLxK5fEzaAU",
-    thumb:
-      "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=240&q=70",
-  },
-  {
-    label: "midnight hawker",
-    url: "https://www.youtube.com/watch?v=pBKlFnh96Tg",
-    thumb:
-      "https://images.unsplash.com/photo-1555126634-323283e090fa?auto=format&fit=crop&w=240&q=70",
-  },
-];
+import { SAMPLES } from "@/lib/samples";
 
 type Phase = "idle" | "uploading" | "sensing" | "done" | "error";
 
@@ -117,9 +97,9 @@ export function VibeInput() {
             e.preventDefault();
             go({ url });
           }}
-          className="flex items-baseline gap-4 border-b border-[var(--color-rule)] pb-3"
+          className="field-input-wrap flex items-baseline gap-4 border-b border-[var(--color-rule)] pb-3"
         >
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-mute)] pt-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-mute)] pt-2 shrink-0">
             url /
           </span>
           <input
@@ -133,14 +113,14 @@ export function VibeInput() {
           <button
             type="submit"
             disabled={busy}
-            className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink)] hover:text-[var(--color-stamp)] transition-colors pt-2 disabled:opacity-40"
+            className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink)] hover:text-[var(--color-stamp)] transition-colors pt-2 disabled:opacity-40 shrink-0"
           >
-            {busy ? "..." : "go"}
+            {busy ? "·" : "go →"}
           </button>
         </form>
 
-        <div className="mt-5 flex flex-wrap gap-x-4 gap-y-3">
-          <span className="caption pt-2">try one</span>
+        <div className="mt-6 flex flex-wrap gap-x-5 gap-y-4">
+          <span className="caption pt-3 shrink-0">try one</span>
           {SAMPLES.map((s, i) => (
             <button
               key={s.url}
@@ -149,18 +129,28 @@ export function VibeInput() {
                 go({ url: s.url });
               }}
               disabled={busy}
-              className="group inline-flex items-center gap-2 disabled:opacity-40"
+              className="inline-flex items-center gap-3 disabled:opacity-40 hover:-translate-y-0.5 transition-transform duration-200"
             >
               <span
-                className="block w-8 h-8 bg-cover bg-center"
-                style={{ backgroundImage: `url(${s.thumb})` }}
+                className="block shrink-0 border-[3px] border-[var(--color-paper-hi)]"
+                style={{
+                  width: 52,
+                  height: 52,
+                  backgroundImage: `url(${s.thumb})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  boxShadow: "var(--shadow-card)",
+                  transform: `rotate(${i % 2 === 0 ? -3 : 2.5}deg)`,
+                }}
                 aria-hidden
               />
-              <span className="font-mono text-[10px] tabular-nums text-[var(--color-ink-faint)]">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <span className="display-italic text-[16px] text-[var(--color-ink)] link-underline">
-                {s.label}
+              <span>
+                <span className="block font-mono text-[10px] tabular-nums text-[var(--color-ink-faint)] mb-0.5">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="display-italic text-[17px] text-[var(--color-ink)] link-underline">
+                  {s.label}
+                </span>
               </span>
             </button>
           ))}

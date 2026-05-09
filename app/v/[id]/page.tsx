@@ -24,7 +24,7 @@ export default async function VibePage({
   const cover = coverImageFor(vibe, places[0]?.photoUrl);
 
   return (
-    <main className="min-h-screen px-6 md:px-14 lg:px-20 pb-20">
+    <main className="min-h-screen px-6 md:px-14 lg:px-20 pb-24 md:pb-20">
       <ApplyPalette hexes={paletteHexes} accent={vibe.palette[1]?.hex} />
       <Header issue={issue} date={date} />
 
@@ -43,26 +43,18 @@ export default async function VibePage({
             {vibe.oneLiner}
           </p>
 
-          <div className="mt-8 flex flex-wrap items-baseline gap-x-5 gap-y-2 caption reveal reveal-4">
-            <span>density</span>
-            <span className="tabular-nums text-[var(--color-ink)]">
-              {Math.round(vibe.density * 100)}
-            </span>
-            <span>·</span>
-            <span>energy</span>
-            <span className="tabular-nums text-[var(--color-ink)]">
-              {Math.round(vibe.energy * 100)}
-            </span>
-            <span>·</span>
-            <span>{vibe.timeOfDay.replace(/-/g, " ")}</span>
+          <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 reveal reveal-4">
+            <MeterField label="density" value={vibe.density} />
+            <span className="caption text-[var(--color-ink-faint)]">·</span>
+            <MeterField label="energy" value={vibe.energy} />
+            <span className="caption text-[var(--color-ink-faint)]">·</span>
+            <span className="caption">{vibe.timeOfDay.replace(/-/g, " ")}</span>
           </div>
         </div>
 
         <div className="col-span-12 lg:col-span-5 reveal reveal-5">
-          <div
-            className="ml-auto"
-            style={{ width: 360, maxWidth: "100%" }}
-          >
+          {/* On mobile: full bleed, no fixed width. On desktop: right-aligned fixed. */}
+          <div className="md:ml-auto" style={{ maxWidth: "100%" }}>
             <Polaroid
               src={cover}
               alt={vibe.title}
@@ -109,20 +101,20 @@ export default async function VibePage({
       </section>
 
       {/* ───── SOUNDSCAPE / MOOD / MUSIC ───── */}
-      <section className="mt-24 md:mt-32 grid grid-cols-12 gap-x-10 gap-y-12">
+      <section className="mt-16 md:mt-32 grid grid-cols-12 gap-x-10 gap-y-10 md:gap-y-12">
         <div className="col-span-12 md:col-span-5">
           <SectionHead num="03" label="soundscape" />
-          <ol className="space-y-3">
+          <ol className="space-y-4">
             {vibe.soundscape.map((s, i) => (
               <li
                 key={s}
-                className="flex items-baseline gap-4 reveal"
+                className="flex items-baseline gap-4 reveal border-b border-dotted border-[var(--color-rule-soft)] pb-4"
                 style={{ animationDelay: `${i * 80 + 200}ms` }}
               >
-                <span className="font-mono text-[11px] tabular-nums text-[var(--color-ink-faint)]">
+                <span className="font-mono text-[11px] tabular-nums text-[var(--color-ink-faint)] shrink-0">
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                <span className="display-md text-[22px] text-[var(--color-ink)]">
+                <span className="display-md text-[22px] md:text-[22px] text-[var(--color-ink)]">
                   {s}
                 </span>
               </li>
@@ -140,9 +132,10 @@ export default async function VibePage({
                 style={{
                   animationDelay: `${i * 80 + 280}ms`,
                   background: "var(--color-paper-hi)",
-                  padding: "6px 12px",
+                  padding: "6px 14px",
                   boxShadow: "var(--shadow-card)",
-                  transform: `rotate(${(i % 2 === 0 ? -1 : 1) * (0.6 + i * 0.2)}deg)`,
+                  border: "1px solid rgba(28,24,20,0.07)",
+                  transform: `rotate(${(i % 2 === 0 ? -1 : 1) * (0.5 + i * 0.18)}deg)`,
                 }}
               >
                 <span className="display-italic text-[18px] text-[var(--color-ink)]">
@@ -167,13 +160,13 @@ export default async function VibePage({
       </section>
 
       {/* ───── NEARBY ───── */}
-      <section className="mt-28 md:mt-40">
-        <div className="flex items-baseline justify-between mb-8">
+      <section className="mt-20 md:mt-40">
+        <div className="flex items-baseline justify-between mb-6 md:mb-8">
           <SectionHead num="06" label="nearby" inline />
-          <span className="caption">ranked by feeling, not stars</span>
+          <span className="caption hidden sm:inline">ranked by feeling, not stars</span>
         </div>
 
-        <div className="grid grid-cols-12 gap-x-10 gap-y-10">
+        <div className="grid grid-cols-12 gap-x-10 gap-y-8 md:gap-y-10">
           <div className="col-span-12 lg:col-span-7">
             <NearbyMap places={places} />
           </div>
@@ -186,21 +179,21 @@ export default async function VibePage({
       </section>
 
       {/* ───── PLAY ───── */}
-      <section className="mt-32 md:mt-44">
-        <div className="border-t border-[var(--color-rule)] pt-10" />
-        <div className="grid grid-cols-12 gap-10 items-end">
+      <section className="mt-24 md:mt-44">
+        <div className="border-t border-[var(--color-rule)] pt-8 md:pt-10" />
+        <div className="grid grid-cols-12 gap-10 items-center md:items-end">
           <div className="col-span-12 md:col-span-7">
             <SectionHead num="07" label="for the night you cant go" />
-            <h2 className="display-lg text-[44px] md:text-[68px] max-w-[18ch]">
+            <h2 className="display-lg text-[38px] md:text-[68px] max-w-[18ch]">
               Play it back, anywhere.
             </h2>
-            <p className="mt-4 text-[16px] leading-[1.55] text-[var(--color-ink-soft)] max-w-[46ch]">
+            <p className="mt-4 text-[15px] md:text-[16px] leading-[1.55] text-[var(--color-ink-soft)] max-w-[46ch]">
               A ninety-second preview rendered from the same palette, the same
-              music, the same room. Three hours when you connect a card.
+              music, the same room.
             </p>
           </div>
 
-          <div className="col-span-12 md:col-span-5 flex md:justify-end">
+          <div className="col-span-12 md:col-span-5 flex justify-center md:justify-end">
             <Link
               href={`/v/${vibe.id}/play`}
               className="inline-flex"
@@ -219,31 +212,51 @@ export default async function VibePage({
 
 // ---------- pieces ----------
 
+function MeterField({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="caption">{label}</span>
+      <div className="meter-track">
+        <div className="meter-fill" style={{ width: `${Math.round(value * 100)}%` }} />
+      </div>
+      <span className="font-mono text-[11px] tabular-nums text-[var(--color-ink)]">
+        {Math.round(value * 100)}
+      </span>
+    </div>
+  );
+}
+
 function Header({ issue, date }: { issue: number; date: string }) {
   return (
-    <header className="pt-10 flex items-baseline justify-between border-b border-[var(--color-rule)] pb-5">
-      <Link href="/" className="display-italic text-[32px] tracking-tight">
-        viber<span className="text-[var(--color-stamp)]">.</span>
-      </Link>
-      <div className="flex items-baseline gap-5 caption">
-        <Link href="/" className="hover:text-[var(--color-stamp)] transition-colors">
-          back
-        </Link>
-        <span>·</span>
-        <Link href="/wizard" className="link-underline">field lab</Link>
-        <span>·</span>
-        <span className="tabular-nums">v.{String(issue).padStart(3, "0")}</span>
-        <span>·</span>
-        <span className="tabular-nums">{date}</span>
+    <div className="pt-6">
+      <div className="border-t-2 border-[var(--color-ink)] flex items-center justify-between pt-2 pb-3">
+        <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--color-ink-mute)]">
+          field guide
+        </span>
+        <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--color-ink-mute)]">
+          v.{String(issue).padStart(3, "0")} · {date}
+        </span>
       </div>
-    </header>
+      <header className="flex items-baseline justify-between border-b border-[var(--color-rule)] pb-5">
+        <Link href="/" className="display-italic text-[32px] tracking-tight">
+          viber<span className="text-[var(--color-stamp)]">.</span>
+        </Link>
+        <div className="flex items-baseline gap-5 caption">
+          <Link href="/" className="hover:text-[var(--color-stamp)] transition-colors">
+            ← back
+          </Link>
+          <span>·</span>
+          <Link href="/wizard" className="link-underline">field lab</Link>
+        </div>
+      </header>
+    </div>
   );
 }
 
 function Footer({ issue, date }: { issue: number; date: string }) {
   return (
     <footer className="mt-32 pt-6 border-t border-[var(--color-rule-soft)]">
-      <div className="flex flex-wrap items-baseline justify-between gap-3 caption">
+      <div className="flex flex-wrap items-baseline justify-between gap-3 caption mb-4">
         <span>
           edition {String(issue).padStart(3, "0")}
           <span className="ml-3 text-[var(--color-ink-faint)]">·</span>
@@ -252,6 +265,11 @@ function Footer({ issue, date }: { issue: number; date: string }) {
         <span className="display-italic normal-case tracking-normal text-[14px] text-[var(--color-ink-soft)]">
           sensed by viber, recreated by gpt-5.5, gemini, veo, and lyria.
         </span>
+      </div>
+      <div className="flex items-center justify-center gap-3 pt-4 border-t border-dotted border-[var(--color-rule-soft)]">
+        <span className="text-[var(--color-ink-faint)]" style={{ fontSize: 8 }}>◆</span>
+        <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-[var(--color-ink-faint)]">viber</span>
+        <span className="text-[var(--color-ink-faint)]" style={{ fontSize: 8 }}>◆</span>
       </div>
     </footer>
   );
@@ -330,6 +348,8 @@ function PlayStamp() {
       style={{
         color: "var(--color-stamp-ink)",
         cursor: "pointer",
+        /* Scale down gracefully on very small screens */
+        transform: "rotate(-7deg) scale(min(1, calc(100vw / 320px)))",
       }}
     >
       <span className="stamp-ink" aria-hidden />
@@ -416,14 +436,30 @@ function formatDate(ts: number) {
   return `${m}.${day}.${String(d.getFullYear()).slice(-2)}`;
 }
 
+// Curated covers for the three fixture vibes — more reliable than YouTube thumbnails.
+const FIXTURE_COVERS: Record<string, string> = {
+  "tokyo-coffee":
+    "https://images.unsplash.com/photo-1453614512568-c4024d13c247?auto=format&fit=crop&w=900&q=80",
+  "lisbon-jazz":
+    "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=900&q=80",
+  "midnight-hawker":
+    "https://images.unsplash.com/photo-1555126634-323283e090fa?auto=format&fit=crop&w=900&q=80",
+};
+
 function coverImageFor(vibe: VibeObject, fallback?: string): string {
+  // Fixture vibes (exact ID or upload-derived copy): use curated Unsplash images.
+  const fixtureKey = Object.keys(FIXTURE_COVERS).find((k) => vibe.id.startsWith(k));
+  if (fixtureKey) return FIXTURE_COVERS[fixtureKey];
+
+  // Real YouTube vibes: sddefault (640×480) is far more reliably served than hqdefault.
   if (vibe.source.kind === "youtube" && vibe.source.url) {
     const m = /[?&]v=([^&]+)|youtu\.be\/([^?&]+)/.exec(vibe.source.url);
     const vid = m?.[1] ?? m?.[2];
-    if (vid) return `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`;
+    if (vid) return `https://i.ytimg.com/vi/${vid}/sddefault.jpg`;
   }
+
   return (
     fallback ??
-    "https://images.unsplash.com/photo-1453614512568-c4024d13c247?auto=format&fit=crop&w=900&q=70"
+    "https://images.unsplash.com/photo-1453614512568-c4024d13c247?auto=format&fit=crop&w=900&q=80"
   );
 }

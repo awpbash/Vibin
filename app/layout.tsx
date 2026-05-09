@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Newsreader, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -26,6 +26,20 @@ export const metadata: Metadata = {
   title: "viber. search the world by feeling.",
   description:
     "Capture the vibe of any place from a YouTube video. Find places near you that feel like it. Generate ambient versions for the nights you cant go.",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "viber.",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#ece3d2",
 };
 
 export default function RootLayout({

@@ -7,6 +7,7 @@ import { PaintChips } from "@/components/PaintChips";
 import { PlaceCard } from "@/components/PlaceCard";
 import { Polaroid } from "@/components/Polaroid";
 import { StickyPlayer } from "@/components/StickyPlayer";
+import { AutoGenerateVideo } from "@/components/AutoGenerateVideo";
 import type { Place, VibeObject } from "@/lib/types";
 
 export default async function VibePage({
@@ -233,6 +234,10 @@ export default async function VibePage({
         vibeId={vibe.id}
         initialMusicUrl={vibe.generatedAssets?.musicUrl ?? null}
         audioSampleUrl={vibe.source?.audioSampleUrl ?? null}
+      />
+      <AutoGenerateVideo
+        vibeId={vibe.id}
+        hasVideo={Boolean(vibe.generatedAssets?.previewVideoUrl)}
       />
     </main>
   );

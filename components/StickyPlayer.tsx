@@ -108,6 +108,17 @@ export function StickyPlayer({
     [source],
   );
 
+  const seekFromEvent = useCallback(
+    (clientX: number, rect: DOMRect) => {
+      const el = audioRef.current;
+      if (!el || !el.duration || !isFinite(el.duration)) return;
+      const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      el.currentTime = frac * el.duration;
+      setProgress(frac);
+    },
+    [],
+  );
+
   return (
     <>
       <audio
@@ -127,11 +138,41 @@ export function StickyPlayer({
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
-        {/* Progress hairline along the very top edge */}
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-[var(--color-rule-soft)]">
+        {/* Progress hairline along the very top edge — clickable + draggable */}
+        <div
+          role="slider"
+          aria-label="seek"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress * 100)}
+          tabIndex={0}
+          onClick={(e) => {
+            seekFromEvent(e.clientX, e.currentTarget.getBoundingClientRect());
+          }}
+          onPointerDown={(e) => {
+            const target = e.currentTarget;
+            target.setPointerCapture(e.pointerId);
+            const rect = target.getBoundingClientRect();
+            seekFromEvent(e.clientX, rect);
+            const onMove = (ev: PointerEvent) => seekFromEvent(ev.clientX, rect);
+            const onUp = (ev: PointerEvent) => {
+              target.releasePointerCapture(ev.pointerId);
+              target.removeEventListener("pointermove", onMove);
+              target.removeEventListener("pointerup", onUp);
+            };
+            target.addEventListener("pointermove", onMove);
+            target.addEventListener("pointerup", onUp);
+          }}
+          className="absolute top-0 left-0 right-0 h-[10px] -translate-y-[4px] bg-transparent cursor-pointer group"
+        >
+          <div className="absolute inset-x-0 top-[4px] h-[2px] bg-[var(--color-rule-soft)] group-hover:h-[3px] group-hover:top-[3px] transition-all" />
           <div
-            className="absolute top-0 left-0 h-full bg-[var(--color-stamp)] transition-[width] duration-100"
+            className="absolute top-[4px] left-0 h-[2px] bg-[var(--color-stamp)] group-hover:h-[3px] group-hover:top-[3px] transition-[width,height] duration-100"
             style={{ width: `${Math.round(progress * 100)}%` }}
+          />
+          <div
+            className="absolute w-2 h-2 rounded-full bg-[var(--color-stamp)] -translate-x-1/2 -translate-y-1/2 top-[5px] opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ left: `${Math.round(progress * 100)}%` }}
           />
         </div>
 

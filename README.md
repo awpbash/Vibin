@@ -1,418 +1,220 @@
-# viber.
+# Viber
 
-> *Shazam, but for vibes.*
+> Search the real world by vibe.
 
-Record fifteen seconds of any room you love. Viber reads the palette, the soundscape, the music underneath — then finds the cafes near you that feel the same.
+A YouTube link or fifteen seconds of any room becomes a palette, a soundscape, a tempo, a mood. That object then walks two directions at once — sideways into Google Maps to find cafes within 2km that feel the same, and forward into a generative pipeline that renders a 60–90s ambient ride video set to matched music. One artifact, three loops.
 
-Built for **AIE Singapore 2026** as a field experiment in vibe-sensing.
-
----
-
-## What it does
-
-1. **Sense** — A short video clip (recorded or YouTube URL) is sampled into 8 still frames. GPT vision extracts palette, lighting, density, energy, soundscape descriptors, a music anchor, and mood tags. The result is embedded with `text-embedding-3-large`.
-
-2. **Locate** — Nearby cafes are scored against the same embedding vector using cosine similarity. Top three are returned ranked by feeling, not stars.
-
-3. **Recreate** — Four cinematic stills are generated with GPT Image 2. A Veo 3 Fast hero clip (8s, with audio) is generated via Fal. ffmpeg stitches them into a ~60-second ambient preview.
+Built solo for AI Engineering Singapore 2026.
 
 ---
 
-## Quick start
+## The pitch
+
+Most AI side-projects produce one artifact and the demo ends there. A song, an image, a video — and then what. Viber's primitive is a `VibeObject`: a serializable, searchable, embeddable atmosphere. Palette and lighting and density and time-of-day. A 1536-dim embedding for cosine search. An `audioAnalysis` block that names the tempo, key, and instruments the model actually heard. A `creativeBrief` block — seven stages deep — that downstream renders cite verbatim so the music, the chained Veo clips, and the still frames all reference the same imagined moment instead of drifting into three different cafes.
+
+The demo killer: a judge picks any YouTube URL. Ninety seconds later, three real cafes within 2km of the venue are pinned on a map, ranked by feeling instead of stars, each with a generated quote on why it matches the source. Click play and the ambient version starts. The map gets richer with every user. Yelp's emotional layer.
+
+---
+
+## How it works
+
+```
+                    ┌───────────────────────┐
+                    │     VIBE OBJECT       │
+                    │  palette, tempo,      │
+                    │  density, soundscape, │
+                    │  mood, embedding,     │
+                    │  audio + brief        │
+                    └───────────┬───────────┘
+                                │
+            ┌───────────────────┼───────────────────┐
+            ▼                   ▼                   ▼
+       ┌─────────┐         ┌──────────┐        ┌──────────┐
+       │ EXTRACT │         │  SEARCH  │        │ GENERATE │
+       │ youtube │         │  google  │        │  music + │
+       │ + audio │         │  places  │        │ veo chain│
+       └─────────┘         └──────────┘        └──────────┘
+```
+
+**EXTRACT** — `lib/extract.ts:50` pulls the source via yt-dlp (or accepts an upload), samples 1 fps up to 24 frames at 768px, and runs vision and audio analysis in parallel. The audio result overrides the vision-guessed `musicAnchor` whenever music is present, and any ambient layers the audio model heard get merged into the soundscape.
+
+**SEARCH** — `lib/places-search.ts:44` calls Google Places (New) within a 2km radius of the venue, infers a baseline `VibeObject` per candidate from photos and reviews, embeds it, and ranks by cosine similarity. Baselines are cached on disk because they're stable for the life of the hackathon.
+
+**GENERATE** — `lib/generate.ts:636` builds the creative brief, generates a music bed (default: source-bridged ElevenLabs Music with optional SFX layer), then chains four 8s Veo 3 Fast clips with first/last-frame interpolation so the four clips read as one ~32s continuous take. ffmpeg stitches and muxes the music underneath.
+
+---
+
+## The AI pipeline
+
+The interesting part. Five techniques worth pointing at.
+
+### 1. Two-pass Plan-and-Solve vision
+
+`lib/extract.ts:409` splits vision into two grounded passes instead of one free-association call. Pass 1 is an evidence inventory — light sources, surfaces, props, palette samples drawn from real pixels — and is *forbidden* to infer atmosphere words. Every observation is prefixed with a frame index. Pass 2 is text-only synthesis from those grounded observations into the canonical `VibeObject`, with a leading `plan` field that cites which observations drove each non-trivial decision (`lib/extract.ts:598`). Conservative defaults fire when evidence is absent. The schema includes the `plan` field so reasoning happens *inside* the structured response, not as throwaway prose.
+
+### 2. The `beatCount10s` tempo trick
+
+`lib/audio-analysis.ts:36`. Tempo is the single most failure-prone audio task for general multimodal models — they soft-guess "90 bpm" for everything. Forcing the model to first emit `beatCount10s` (the integer count of beats it actually heard in the 10s slice) and then derive `tempoBpm = beatCount10s * 6` reframes the task from estimation to counting + arithmetic, both of which it can do. The schema lists `beatCount10s` *before* `tempoBpm` so structured-output decoding has to commit to the count first; tempo is then anchored. `normalizeSlice` (`lib/audio-analysis.ts:340`) defends the invariant in code — if the model emits a mismatch, the count wins.
+
+### 3. Three-slice self-consistency on audio
+
+`lib/audio-analysis.ts:211`. Three 10s slices (intro, mid, outro) of the source audio are analyzed in parallel by `gpt-4o-audio-preview`, then a text-only reconciliation pass on `gpt-5.4` applies fixed consensus rules: median tempo, 2-of-3 agreement for instruments and ambient layers, longest non-empty `vocalCharacter`. If the reconciliation LLM call fails, `localReconcile` (`lib/audio-analysis.ts:358`) implements the same rules deterministically in TypeScript so the pipeline still ships an `AudioAnalysis`.
+
+### 4. Seven-stage least-to-most creative brief
+
+`lib/creative-brief.ts:486`. Coherence across renders is owned by one LLM reasoning pass instead of being assembled at video time. Seven sequential structured-output calls — subject, three shots, hero shot, vocal decision, lyrics (only if vocals were decided), music prompt, four chain prompts — each carrying every prior stage forward. Every schema starts with a `plan` string for guided chain-of-thought. The shots stage requires that each shot description reuse a noun phrase from the subject paragraph *verbatim*. The music prompt cites the source's tempo, key, and top instruments inside a `[REFERENCE FROM SOURCE]` block. The four Veo chain prompts each end with the literal sign-off `Camera locked off. Documentary footage, not music video.`
+
+### 5. COVE verification with cheap deterministic Layer 1
+
+`lib/verify-brief.ts:258`. Chain-of-Verification, two layers. Layer 1 is pure TypeScript: subject grounding (does the paragraph mention any lighting word, palette hex, or visualMotif noun?), shot prop citation (does each shot description contain a verbatim noun phrase from the subject?), hero motion event count (≥3 timestamped clauses?), music prompt audio citations (tempo + key + 2-of-3 top instruments?), chain prompt continuity (clip 0 must *not* contain "picking up"; clips 1+ must contain a continuation cue; every clip ends with the sign-off). Layer 1 is free and catches the common failures. Only fields that fail get sent to Layer 2 — a per-field LLM repair on `gpt-4o-mini`. Single-round policy: re-run Layer 1 once after repair, log remaining failures, do not repair again.
+
+### 6. Music as a source-aware bridge, not a fresh generation
+
+`lib/generate.ts:182`. Default backend is `bridge`: take the persisted 30s source audio sample, slice it into a 15s head (with 1s fade-in) and 15s tail (with 1s fade-out), generate a 60s ElevenLabs Music body using a prompt that explicitly tells the model "this is a continuation, do not open from silence, end softly", then `acrossfade` head→body→tail with a 5s crossfade on each side. Optional SFX layer (`lib/generate.ts:232`) generates a 22s ElevenLabs Sound Effects bed from the audio analysis's ambient layers, loops it under the music at -15 dB. The result reads as one continuous recording of the room, not a generated track stapled to silence.
+
+### 7. Veo chain mode, not a slideshow
+
+`lib/generate.ts:459`. Four 8s Veo 3 Fast clips chained via image-to-video: clip 0 is text-to-video, every subsequent clip's `firstFrame` is the previous clip's last frame extracted with ffmpeg `-sseof -1`. The handoffs are seamless because each clip *literally* begins on the previous clip's final frame. ffmpeg concatenates with a 0.2s xfade — ornamental, since the frames already match. Hero-only mode is the cheap fallback: one 8s Veo with native audio, the player loops the file. No stills, no Ken Burns zoompan anywhere — these are the two things that make AI video look AI.
+
+---
+
+## Stack
+
+**Frontend**
+- Next.js 15.5 (App Router, Turbopack)
+- React 19, TypeScript 5.7
+- Tailwind CSS 4 (inline `@theme` in `app/globals.css`, no config file)
+- framer-motion, `@vis.gl/react-google-maps`
+
+**AI / generation**
+- OpenAI: `gpt-5.4` / `gpt-5.4-mini` (vision, brief), `gpt-4o-audio-preview` (audio slices), `gpt-4o-mini` (brief repair, light tasks), `text-embedding-3-large`, `gpt-image-2`
+- Google Gemini 3 Flash (optional image / Veo backend)
+- Fal.ai Veo 3 Fast (hero motion, image-to-video for chain)
+- ElevenLabs Music + Sound Effects
+- Google Maps Places API (New)
+
+**Infra**
+- Neon Postgres + drizzle-orm for vibes / places persistence (with `.viber/*.json` sidecar fallback)
+- Vercel Blob for generated mp3 / mp4 (with `/public/generated/` fallback for local dev)
+- Vercel for deploy
+- yt-dlp + ffmpeg as system dependencies
+
+---
+
+## Run locally
 
 ```bash
 git clone <repo>
 cd viber
 npm install
-cp .env.example .env.local   # fill in your keys
-npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and paste a YouTube link, or tap the record button on mobile.
-
-**Without any API keys**, the app runs in mock mode — all three fixture vibes work instantly with no external calls.
-
----
-
-## Environment variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `OPENAI_API_KEY` | Real mode | Used for vision extraction (`gpt-5.5`), image generation (`gpt-image-1`), and embeddings (`text-embedding-3-large`) |
-| `FAL_API_KEY` | Optional | Fal.ai key for Veo 3 Fast video generation. Skipped if absent — preview falls back to palette gradient |
-| `GOOGLE_MAPS_API_KEY` | Optional | Static Maps embed on the vibe detail page |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Optional | Same key, exposed to the browser for the map image |
-| `NEXT_PUBLIC_VIBER_VENUE_LAT` | Optional | Lat of the demo venue pin (default: `1.3018`) |
-| `NEXT_PUBLIC_VIBER_VENUE_LNG` | Optional | Lng of the demo venue pin (default: `103.8553`) |
-| `USE_MOCK_PIPELINE` | — | Set to `"false"` to enable real extraction. Defaults to mock mode |
-| `OPENAI_VISION_MODEL` | — | Override vision model (default: `gpt-5.5`) |
-| `OPENAI_IMAGE_MODEL` | — | Override image model (default: `gpt-image-1`) |
-| `OPENAI_EMBED_MODEL` | — | Override embedding model (default: `text-embedding-3-large`) |
-| `VIBER_USE_VEO` | — | Set to `"false"` to skip Veo generation and use stills-only |
-| `VIBER_VEO_MODEL` | — | Override Veo model slug (default: `fal-ai/veo3/fast`) |
-| `VIBE_DATA_DIR` | — | Override the `.viber/` data directory path |
-
-### System dependencies (real mode only)
+Create `.env.local` and fill in your keys (see the table below). The current repo does not ship a `.env.local.example` template — copy from the table and paste.
 
 ```bash
-brew install yt-dlp ffmpeg    # macOS
-# or: apt install ffmpeg && pip install yt-dlp
+# system deps (real mode only)
+brew install yt-dlp ffmpeg            # macOS
+# or:  apt install ffmpeg && pip install yt-dlp
+
+# initialise the Neon schema (idempotent, all CREATE IF NOT EXISTS)
+npx tsx scripts/init-db.ts
+
+# dev server
+npm run dev                           # localhost:3000
+npm run mobile                        # 0.0.0.0:3000 — phone on same wifi
+```
+
+For real device testing — camera and geolocation need HTTPS:
+
+```bash
+ngrok http 3000
+```
+
+Optional one-time bake of the three featured demo vibes (extract + music + four-clip chain, ~5–7 min per sample):
+
+```bash
+npx tsx scripts/prebake-demos.ts
 ```
 
 ---
 
-## Architecture
+## Required env vars
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `OPENAI_API_KEY` | yes | Vision, audio reconcile, brief, embeddings, place baselines |
+| `ELEVENLABS_API_KEY` | yes (for generate) | Music + Sound Effects bed |
+| `FAL_API_KEY` | yes (for video) | Veo 3 Fast text-to-video and image-to-video |
+| `GOOGLE_MAPS_API_KEY` | yes (for live search) | Server-side Places (New) |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | yes (for the map) | Client-side map embed (same key, restrict by domain) |
+| `DATABASE_URL` | optional | Neon Postgres. Falls back to `.viber/*.json` if unset |
+| `BLOB_READ_WRITE_TOKEN` | optional | Vercel Blob for generated assets. Falls back to `/public/generated/` |
+| `GEMINI_API_KEY` | optional | Alternate audio / image / Veo backend |
+| `YOUTUBE_API_KEY` | optional | Metadata only — extraction uses yt-dlp directly |
+| `VIBER_VENUE_LAT` / `_LNG` | optional | Centre point for nearby search (default: central Singapore, 1.3018, 103.8553) |
+| `VIBER_VENUE_RADIUS_M` | optional | Default 2000 |
+| `VIBER_VIDEO_MODE` | optional | `chain` (default, 4× 8s Veo) or `hero-only` (1× 8s, cheaper) |
+| `VIBER_MUSIC_BACKEND` | optional | `bridge` (default) or `elevenlabs` |
+| `OPENAI_VISION_MODEL` | optional | Default `gpt-5.4-mini`, falls back through 5-mini, 4o-mini, 4o |
+
+Three fixture vibes (`tokyo-coffee`, `lisbon-jazz`, `midnight-hawker`) are hardcoded in `lib/fixtures.ts` — the landing page renders them with no API keys, so the demo runs even with zero generated content.
+
+---
+
+## Project structure
 
 ```
-app/
-├── page.tsx               Home — hero, polaroid stack, VibeInput (desktop), MobileActionBar
-├── wizard/page.tsx        Field Lab — step-by-step pipeline inspector with curl commands
-├── v/[id]/
-│   ├── page.tsx           Vibe detail — palette, soundscape, mood, nearby, play CTA
-│   └── play/page.tsx      Fullscreen ambient player (90s preview)
-├── api/
-│   ├── extract/route.ts   POST: video file or YouTube URL → { vibeId }
-│   ├── vibe/[id]/route.ts GET: full VibeObject + matched places
-│   ├── search/route.ts    GET: ?vibeId=X → places ranked by cosine similarity
-│   └── generate/route.ts  POST: { vibeId } → { previewVideoUrl }
-└── globals.css            Design system — all tokens, tactile classes, mobile CSS
-
+app/                    Next.js App Router pages + API routes
+  page.tsx              Landing — hero, polaroid stack, sample chips
+  v/[id]/               Vibe detail + fullscreen player
+  api/                  extract / vibe / search / generate
+components/             Polaroid, PaintChips, FieldMap, PlaceCard, ApplyPalette, ...
 lib/
-├── extract.ts             Real pipeline: yt-dlp → ffmpeg frames → GPT vision → embed
-├── generate.ts            GPT Image 2 stills + Fal Veo 3 + ffmpeg stitch
-├── search.ts              Cosine similarity ranking
-├── places-search.ts       Google Maps Places API integration
-├── mock-data.ts           Three fixture vibes + place sets, in-memory store + hydration
-├── persist.ts             JSON sidecar persistence (.viber/vibes.json, by-url.json)
-├── samples.ts             Shared YouTube sample URLs used by VibeInput and MobileActionBar
-├── types.ts               VibeObject and Place TypeScript types
-├── colors.ts              Color manipulation utilities
-└── vibe-prompt.ts         GPT structured output schema + system prompt
-
-components/
-├── MobileActionBar.tsx    Fixed bottom bar — record button + URL drawer (mobile only)
-├── VibeInput.tsx          Stamp button + URL form + samples (desktop)
-├── StampButton.tsx        264px circular stamp CTA
-├── Polaroid.tsx           Photo frame with tape strips
-├── PaintChips.tsx         Palette color swatches
-├── ApplyPalette.tsx       Injects --vibe-* CSS vars from palette hexes
-├── PlaceCard.tsx          Tilted card with photo, name, match score, why-it-matches
-├── NearbyMap.tsx          Google Static Maps embed with Mercator pin projection
-└── Player.tsx             Fullscreen ambient player with Ken Burns gradient
+  extract.ts            yt-dlp + ffmpeg + two-pass vision + audio
+  audio-analysis.ts     3-slice self-consistency on gpt-4o-audio
+  creative-brief.ts     7-stage least-to-most pipeline
+  verify-brief.ts       COVE — Layer 1 deterministic + Layer 2 LLM repair
+  generate.ts           Bridge music + Veo chain + ffmpeg stitch
+  places-search.ts      Google Places + cosine ranking
+  fixtures.ts           Three hardcoded fallback vibes
+  vibe-store.ts         Neon-or-JSON persistence
+  storage.ts            Vercel Blob-or-disk asset storage
+  types.ts              VibeObject, AudioAnalysis, CreativeBrief, Place
+scripts/
+  init-db.ts            Run lib/db/init.sql against DATABASE_URL
+  prebake-demos.ts      Full end-to-end bake of the three samples
+public/
+.viber/                 Local dev sidecar (gitignored): vibes.json, by-url.json, uploads/
 ```
 
 ---
 
-## Data model
+## Demo script (4 minutes)
 
-### VibeObject
-
-```ts
-type VibeObject = {
-  id: string
-  source: {
-    kind: "youtube" | "capture" | "place_baseline"
-    url?: string       // YouTube URL
-    title?: string
-    placeId?: string
-  }
-
-  title: string          // "A Tokyo Coffee Shop, Late Afternoon"
-  oneLiner: string       // Evocative one-liner for the vibe
-
-  palette: { name: string; hex: string }[]   // 4 dominant colors
-  lighting: string       // e.g. "low, warm tungsten with one cool fill"
-  spatial: string        // e.g. "intimate, low ceilings, eight seats"
-  visualMotifs: string[] // ["espresso machine", "ceramic cups", ...]
-
-  density: number        // 0–1: how full/busy the space feels
-  energy: number         // 0–1: tempo, kinetic feeling
-  timeOfDay: "morning" | "midday" | "afternoon" | "evening" | "late-night"
-  weatherImplied?: string
-
-  soundscape: string[]   // 5–7 descriptors
-  musicAnchor: {
-    genre: string
-    tempoBpm: number
-    key?: string
-    referenceTrack?: string
-  }
-  moodTags: string[]
-
-  embedding?: number[]   // text-embedding-3-large vector for cosine search
-
-  generatedAssets?: {
-    previewVideoUrl?: string
-    musicUrl?: string
-  }
-
-  createdAt: number
-}
-```
-
-### Place
-
-```ts
-type Place = {
-  id: string
-  googlePlaceId?: string
-  name: string
-  address: string
-  neighbourhood: string
-  distanceMeters: number
-  walkMinutes: number
-  rating: number
-  photoUrl: string
-  matchScore: number       // 0–1 cosine similarity
-  whyThisMatches: string   // GPT-generated match explanation
-  hours?: string
-  openNow?: boolean
-  location: { lat: number; lng: number }
-}
-```
-
----
-
-## API routes
-
-### `POST /api/extract`
-
-Accepts either a video file upload or a JSON body with a YouTube URL.
-
-**Multipart (recorded/uploaded video)**
-```bash
-curl -X POST http://localhost:3000/api/extract \
-  -F 'video=@clip.mp4'
-```
-
-**JSON (YouTube URL)**
-```bash
-curl -X POST http://localhost:3000/api/extract \
-  -H 'Content-Type: application/json' \
-  -d '{"url":"https://www.youtube.com/watch?v=dx9aDku80kM"}'
-```
-
-**Response**
-```json
-{ "vibeId": "v-abc123" }
-```
-
-In mock mode, returns one of the three fixture vibes instantly. URL results are cached in `.viber/by-url.json` so the same link doesn't re-run the pipeline.
-
----
-
-### `GET /api/vibe/[id]`
-
-Returns the full `VibeObject` plus matched places.
-
-```bash
-curl http://localhost:3000/api/vibe/tokyo-coffee
-```
-
-```json
-{
-  "vibe": { "id": "tokyo-coffee", "title": "A Tokyo Coffee Shop, Late Afternoon", ... },
-  "places": [{ "name": "Apartment Coffee", "matchScore": 0.93, ... }]
-}
-```
-
----
-
-### `GET /api/search?vibeId=X`
-
-Returns places ranked by cosine similarity to the vibe's embedding.
-
-```bash
-curl 'http://localhost:3000/api/search?vibeId=tokyo-coffee'
-```
-
----
-
-### `POST /api/generate`
-
-Triggers the generation pipeline for a given vibe. Returns cached result if already generated. No-op in mock mode (preview uses palette gradient instead).
-
-```bash
-curl -X POST http://localhost:3000/api/generate \
-  -H 'Content-Type: application/json' \
-  -d '{"vibeId":"v-abc123"}'
-```
-
-**Response**
-```json
-{ "previewVideoUrl": "/generated/v-abc123.mp4", "durationSeconds": 60 }
-```
-
----
-
-## The pipeline (real mode)
-
-### Extract
-
-```
-YouTube URL
-  └─ yt-dlp → v.mp4 (≤720p)
-       └─ ffprobe → duration
-            └─ ffmpeg × 8 → frames (JPEG, 1280px wide)
-                 └─ GPT-5.5 vision (structured output) → VibeObject draft
-                      └─ text-embedding-3-large → 3072-dim vector
-                           └─ saved to .viber/vibes.json
-```
-
-The vision model receives the 8 frames and a structured output schema enforcing the full `VibeObject` shape. The embedding is built from a concatenated text representation of all fields.
-
-### Search
-
-Places are scored against the query vibe using **cosine similarity** over the `text-embedding-3-large` embeddings. In real mode, the app calls Google Maps Places API for cafes within 2km of the venue, infers a baseline vibe from photos and reviews, then ranks by embedding distance.
-
-### Generate
-
-```
-VibeObject
-  ├─ GPT Image 2 × 4 → stills (1536×1024 PNG)  ~$0.68
-  ├─ Fal Veo 3 Fast (8s, 720p, with audio)       ~$1.20
-  └─ ffmpeg
-       ├─ Ken Burns zoom on each still (zoompan)
-       ├─ xfade transitions between stills
-       ├─ xfade into Veo hero clip
-       └─ → /public/generated/{vibeId}.mp4       ~free
-```
-
-**Rough cost per preview: ~$1.88**
-
-Stills-only mode (no `FAL_API_KEY`): ~$0.68, player shows palette gradient instead of Veo clip.
-
----
-
-## Persistence
-
-Vibes survive `next dev` restarts via JSON sidecars in `.viber/`:
-
-| File | Contents |
+| Time | Beat |
 |---|---|
-| `.viber/vibes.json` | All `VibeObject`s keyed by id |
-| `.viber/by-url.json` | YouTube URL → vibeId cache (prevents re-extraction) |
-| `.viber/uploads/` | Uploaded video files (kept for demo replay) |
-| `.viber/tmp/` | Scratch space for yt-dlp frames and ffmpeg; auto-purged |
-
-The in-memory store is hydrated from `vibes.json` on first read. Writes are best-effort (don't block the response).
-
----
-
-## Fixture vibes
-
-Three built-in vibes work in mock mode and serve as fallbacks in real mode:
-
-| ID | Title | Source |
-|---|---|---|
-| `tokyo-coffee` | A Tokyo Coffee Shop, Late Afternoon | `youtube.com/watch?v=dx9aDku80kM` |
-| `lisbon-jazz` | A Lisbon Jazz Bar, After Eleven | `youtube.com/watch?v=lLxK5fEzaAU` |
-| `midnight-hawker` | A Hawker Centre, Past Midnight | `youtube.com/watch?v=pBKlFnh96Tg` |
-
-Each fixture has a curated palette, soundscape, music anchor, mood tags, and a matching set of real Singapore venues.
+| 0:00 – 0:15 | "We turned Google Maps into a search engine for vibes." Map of the venue area, generic. |
+| 0:15 – 0:45 | Volunteer picks a YouTube URL of a cafe ambient video. Paste into Viber. |
+| 0:45 – 1:30 | The vibe object streams in. Page background tints toward the palette. Soundscape, mood, music details appear in editorial type. |
+| 1:30 – 2:15 | Cut to map. Three numbered pins drop in sequentially. Pre-seeded results within 2km. |
+| 2:15 – 2:45 | Click pin 1. Place card slides in. The "why this matches" quote references the same palette and instruments. |
+| 2:45 – 3:30 | "Can't go now? Play it." The 60–90s generated preview plays — bridged music, four-clip Veo chain. |
+| 3:30 – 4:00 | "Every place gets vibe-tagged. Map gets richer with every user. Yelp's emotional layer." |
 
 ---
 
-## UI & design system
+## What's intentionally not built
 
-The design language is **analog / field guide** — warm paper tones, polaroids, scotch tape, rubber stamps, hand-drawn annotations.
+Solo scope, brutal triage. These ship later, not at the hackathon.
 
-### Tokens (`globals.css`)
-
-| Variable | Value | Role |
-|---|---|---|
-| `--color-paper` | `#ece3d2` | Background (warm cream) |
-| `--color-paper-hi` | `#f4ecdc` | Elevated surfaces |
-| `--color-ink` | `#1c1814` | Primary text |
-| `--color-stamp` | `#a82e1a` | Accent / CTA (rust red) |
-| `--color-tape` | `#f0c869` | Scotch tape element |
-| `--color-pencil` | `#4a3f33` | Hand-drawn annotations |
-| `--vibe-*` | dynamic | Injected per-vibe by `ApplyPalette` |
-
-### Tactile classes
-
-| Class | Description |
-|---|---|
-| `.polaroid` | Photo frame with white border and bottom label panel |
-| `.tape` | Scotch tape strip with dotted edges |
-| `.stamp` | 264px circular rubber stamp with arc text |
-| `.paint-chip` | Color swatch with label tab |
-| `.paper-fold` | CSS triangle corner fold |
-| `.mobile-bar` | Frosted-glass bottom bar (`backdrop-filter: blur(24px)`) |
-
-### Typography
-
-| Class | Font | Use |
-|---|---|---|
-| `.display-xl` | Newsreader 500 | Hero headings |
-| `.display-italic` | Newsreader 500 italic | Accent text, titles |
-| `.eyebrow` | JetBrains Mono | Section labels (uppercase, wide tracking) |
-| `.caption` | JetBrains Mono | Metadata, numbers (uppercase, wide tracking) |
-| `.field-input` | Newsreader 400 | URL / text inputs |
-
-### Animations
-
-| Class | Description |
-|---|---|
-| `.reveal` | Fade + slide up (800ms, staggerable with `.reveal-1` → `.reveal-10`) |
-| `.reveal-tilt-l/r/m` | Reveal with perspective rotation (for polaroids) |
-| `.pulse-soft` | Gentle opacity pulse (used on the stamp while busy) |
-| `.record-pulse` | Expanding ring pulse on the mobile record button |
-| `.stamp-busy` | Shimmer sweep on the stamp ink texture while processing |
+- **Adaption Labs nightly run** — events are logged but no offline batch retrains the place baselines.
+- **Three-hour long-form rendering** — only the 60–90s preview exists. Long-form is a stage we cut for time.
+- **User place tagging flow** — baselines come from photos and reviews, not user-submitted vibes.
+- **Facet-aware similarity** — single global embedding, no per-facet (palette / sound / mood) ranking.
+- **ACRCloud audio fingerprinting** — the audio model identifies character, not specific tracks.
+- **User auth / profiles / saved vibes / sharing** — none of it. The artifact survives in the URL.
+- **Live geolocation** — the venue is hardcoded to central Singapore via `VIBER_VENUE_LAT/LNG`.
 
 ---
 
-## Pages
-
-| Route | Description |
-|---|---|
-| `/` | Home — hero, polaroid stack, VibeInput (desktop), MobileActionBar (mobile) |
-| `/wizard` | Field Lab — step-by-step pipeline inspector with live request/response and curl commands |
-| `/v/[id]` | Vibe detail — full analysis across 7 sections (palette, place sense, soundscape, mood, music, nearby, play) |
-| `/v/[id]/play` | Fullscreen ambient player — palette gradient / Veo video with progress bar |
-
----
-
-## Mobile
-
-The app is designed to be used on a phone. On `md` screens and above it renders the standard editorial layout. On mobile:
-
-- A **fixed bottom action bar** (`MobileActionBar`) replaces the inline stamp button. It has:
-  - A large red record button that triggers `capture="environment"` for direct camera access
-  - A slide-up drawer with the URL input and mini polaroid sample thumbnails
-  - Frosted-glass `backdrop-filter` for a native iOS feel
-- All layouts respect `env(safe-area-inset-*)` for iPhone notch and home indicator
-- Minimum 44px touch targets
-- The `viewport` is configured with `viewport-fit=cover`, `maximum-scale=1`, and Apple PWA meta tags
-
----
-
-## Development
-
-```bash
-npm run dev      # Next.js 15 with Turbopack
-npm run build    # Production build
-npm run lint     # ESLint
-```
-
-### Field Lab
-
-`/wizard` is a step-through pipeline inspector. Submit any URL or clip and watch each API call go out and come back, with the full request, response, and a paste-ready `curl` command for each step.
-
----
-
-## Project context
-
-Built at **AIE Singapore 2026** as a demonstration of vibe-based spatial search. The premise: if Shazam can identify a song from a few seconds of audio, a model with vision and language can identify the *feeling* of a place from a few seconds of video — and use that feeling as a search query against the physical world.
-
-The current build is a solo-mode field unit. The venue is fixed to central Singapore. Real deployment would add:
-
-- User location (browser geolocation or device GPS)
-- Live Google Maps Places search within radius
-- Per-place vibe inference at query time (photos + reviews → embedding)
-- Authenticated sessions and saved vibes
-- Push notifications when a matched venue opens
-
----
-
-*made for places that already exist.*
+*Built solo for AI Engineering Singapore 2026.*

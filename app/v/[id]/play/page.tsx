@@ -11,5 +11,11 @@ export default async function PlayPage({
   const vibe = await getVibe(id);
   if (!vibe) return notFound();
 
-  return <Player vibe={vibe} previewUrl={vibe.generatedAssets?.previewVideoUrl} />;
+  return (
+    <Player
+      vibe={vibe}
+      previewUrl={vibe.generatedAssets?.previewVideoUrl}
+      musicUrl={vibe.generatedAssets?.musicUrl}
+    />
+  );
 }

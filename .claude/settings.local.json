@@ -10,7 +10,10 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(npm run *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(npx --yes tsx scripts/prebake-local.ts \"demo/snaptik_7541363142295637256_v3.mp4\" \"tokyo coffee shop\")",
+      "Bash(npx --yes tsx --env-file=.env.local scripts/prebake-local.ts \"demo/snaptik_7541363142295637256_v3.mp4\" \"tokyo coffee shop\")",
+      "Bash(npx --yes vercel env pull .env.local --environment=production --yes)"
     ]
   }
 }

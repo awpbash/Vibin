@@ -4,7 +4,8 @@ import { generatePreview } from "@/lib/generate";
 
 export const runtime = "nodejs";
 // Music + 4-clip Veo chain may run several minutes end-to-end.
-export const maxDuration = 600;
+// Hobby plan caps at 300s; on Pro/Enterprise we could push higher.
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const { vibeId } = (await req.json()) as { vibeId?: string };

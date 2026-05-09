@@ -5,6 +5,7 @@
 
 import { spawn } from "child_process";
 import { promises as fs } from "fs";
+import os from "os";
 import path from "path";
 import OpenAI from "openai";
 import { VIBE_EXTRACTION_PROMPT, VIBE_OBJECT_SCHEMA } from "./vibe-prompt";
@@ -71,7 +72,9 @@ async function extract(input: ExtractInput): Promise<VibeObject> {
   }
 
   const id = `v-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-  const tmp = path.join(process.cwd(), ".viber", "tmp", id);
+  // Use os.tmpdir() so this works on Vercel serverless (only /tmp is
+  // writable). Locally that's the OS temp dir, which is also fine.
+  const tmp = path.join(os.tmpdir(), "viber", id);
   await fs.mkdir(tmp, { recursive: true });
 
   try {

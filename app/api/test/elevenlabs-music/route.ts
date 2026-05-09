@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { promises as fs } from "fs";
-import path from "path";
 import { generateMusic } from "@/lib/elevenlabs";
+import { saveAsset } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -41,16 +40,14 @@ export async function POST(req: Request) {
     const ms = Math.round(performance.now() - t0);
 
     const fname = `test-music-${Date.now()}.mp3`;
-    const dir = path.join(process.cwd(), "public", "generated", "test");
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, fname), buf);
+    const stored = await saveAsset("generated", fname, buf, "audio/mpeg");
 
     return NextResponse.json({
       ok: true,
       durationMs: ms,
       prompt,
       lengthMs,
-      audioUrl: `/generated/test/${fname}`,
+      audioUrl: stored.url,
       bytes: buf.byteLength,
     });
   } catch (e) {

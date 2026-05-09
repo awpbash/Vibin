@@ -10,6 +10,7 @@
 //   ./.viber/place-baselines.json   inferred vibe per google place id
 
 import { promises as fs } from "fs";
+import os from "os";
 import path from "path";
 import type { Place, VibeObject } from "./types";
 import { hasDatabase } from "./db/client";
@@ -25,7 +26,15 @@ import {
   dbSaveVibe,
 } from "./db/repo";
 
-const dir = process.env.VIBE_DATA_DIR ?? path.join(process.cwd(), ".viber");
+// On Vercel only /tmp is writable at runtime. When DATABASE_URL is set
+// we never hit this branch anyway, but if it's ever missing in prod we
+// don't want JSON writes to crash the route.
+const onVercel = Boolean(process.env.VERCEL);
+const dir =
+  process.env.VIBE_DATA_DIR ??
+  (onVercel
+    ? path.join(os.tmpdir(), "viber-data")
+    : path.join(process.cwd(), ".viber"));
 
 async function ensureDir() {
   try {

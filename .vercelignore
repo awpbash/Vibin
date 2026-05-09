@@ -1,0 +1,25 @@
+# Local-only state and generated assets — these must NEVER ship to Vercel.
+# (Vercel runtime filesystem is read-only anyway; we use Vercel Blob in prod.)
+.viber/
+public/generated/
+public/uploads/
+
+# Local env / secrets
+.env
+.env.local
+.env*.local
+
+# Build artifacts (Vercel rebuilds these)
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Misc
+*.log
+node_modules/

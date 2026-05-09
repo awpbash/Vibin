@@ -24,47 +24,15 @@ const VENUE = {
 };
 const ZOOM = 14;
 
-// Muted, low-saturation map style. Tuned to sit underneath the paper
-// overlay so it reads as a printed map, not a Google Maps default.
-const PAPER_MAP_STYLE: google.maps.MapTypeStyle[] = [
-  { elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  {
-    featureType: "landscape.man_made",
-    stylers: [{ color: "#ece3d2" }],
-  },
-  {
-    featureType: "landscape.natural",
-    stylers: [{ color: "#d9cdb1" }],
-  },
-  {
-    featureType: "landscape.natural.terrain",
-    stylers: [{ color: "#c7b893" }],
-  },
-  { featureType: "water", stylers: [{ color: "#6f6557" }] },
-  {
-    featureType: "road",
-    elementType: "geometry",
-    stylers: [{ color: "#b9ad95" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry",
-    stylers: [{ color: "#a89a7e" }],
-  },
-  { featureType: "road", elementType: "labels", stylers: [{ visibility: "off" }] },
-  {
-    featureType: "administrative",
-    elementType: "geometry",
-    stylers: [{ color: "#8a7c63" }],
-  },
-  {
-    featureType: "administrative",
-    elementType: "labels",
-    stylers: [{ visibility: "off" }],
-  },
-];
+// AdvancedMarker requires a Map ID. Set NEXT_PUBLIC_GOOGLE_MAP_ID in
+// Cloud Console for real cloud-styled tiles; the placeholder below
+// is enough to make Google fall back to defaults so the markers
+// still render in dev.
+const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAP_ID || "DEMO_MAP_ID";
+
+// Map styling lives in Google Cloud Console now (Cloud Styling), keyed
+// off NEXT_PUBLIC_GOOGLE_MAP_ID. The paper overlay + grain divs below
+// keep the editorial feel even with Google's default tiles.
 
 export function NearbyMap({ places }: { places: Place[] }) {
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -87,12 +55,12 @@ export function NearbyMap({ places }: { places: Place[] }) {
           {key ? (
             <APIProvider apiKey={key}>
               <Map
+                mapId={MAP_ID}
                 defaultCenter={VENUE}
                 defaultZoom={ZOOM}
                 gestureHandling="cooperative"
                 disableDefaultUI={true}
                 clickableIcons={false}
-                styles={PAPER_MAP_STYLE}
                 style={{ width: "100%", height: "100%" }}
               >
                 <VenueMarker />

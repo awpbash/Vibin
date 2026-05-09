@@ -4,6 +4,7 @@
 
 import type { Place, VibeObject } from "./types";
 import { loadVibes, saveVibeToDisk } from "./persist";
+import { FIXTURE_VIBES } from "./fixtures";
 
 const store = new Map<string, VibeObject>();
 const placesByVibe = new Map<string, Place[]>();
@@ -18,6 +19,10 @@ let warnedPlacesGeneric = false;
 async function hydrate() {
   if (hydrated) return;
   hydrated = true;
+  // Fixtures first so the FieldMap pin IDs always resolve, even on a
+  // cold function with an empty DB. Real vibes from storage overwrite
+  // any matching id, so prebakes still win.
+  for (const v of Object.values(FIXTURE_VIBES)) store.set(v.id, v);
   try {
     const all = await loadVibes();
     for (const v of Object.values(all)) store.set(v.id, v);

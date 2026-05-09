@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 import { promises as fs } from "fs";
+import os from "os";
 import path from "path";
 import { analyzeAudio } from "@/lib/audio-analysis";
 
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
   const durationSec = Math.min(Math.max(body.durationSec ?? 30, 4), 30);
 
   const id = `t-${Date.now().toString(36)}`;
-  const tmp = path.join(process.cwd(), ".viber", "tmp", id);
+  const tmp = path.join(os.tmpdir(), "viber", id);
   await fs.mkdir(tmp, { recursive: true });
 
   const stages: Array<{ name: string; ms: number; ok: boolean; note?: string }> = [];

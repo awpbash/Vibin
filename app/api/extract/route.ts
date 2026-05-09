@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { promises as fs } from "fs";
+import os from "os";
 import path from "path";
 import { saveVibe } from "@/lib/vibe-store";
 import { extractFromUpload, extractFromYouTube } from "@/lib/extract";
 import { cacheVibeIdForUrl, getCachedVibeIdForUrl } from "@/lib/persist";
+import { saveAsset } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -23,17 +25,28 @@ export async function POST(req: Request) {
     const stamp = Date.now().toString(36);
     const slug = `upload-${stamp}-${Math.random().toString(36).slice(2, 6)}`;
     const fname = `${slug}.${ext}`;
-    const publicDir = path.join(process.cwd(), "public", "uploads");
-    await fs.mkdir(publicDir, { recursive: true });
-    const dest = path.join(publicDir, fname);
     const buf = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(dest, buf);
-    const previewUrl = `/uploads/${fname}`;
     const contentType = file.type || `video/${ext}`;
+
+    // Persist via storage abstraction: Vercel Blob in prod, /public/uploads
+    // locally. We still need an on-disk path for ffmpeg to read; for blob
+    // storage, write a copy to os.tmpdir() (the only writable path on
+    // Vercel serverless).
+    const stored = await saveAsset("uploads", fname, buf, contentType);
+    let videoPath: string;
+    if (stored.localPath) {
+      videoPath = stored.localPath;
+    } else {
+      const tmpDir = path.join(os.tmpdir(), "viber-uploads");
+      await fs.mkdir(tmpDir, { recursive: true });
+      videoPath = path.join(tmpDir, fname);
+      await fs.writeFile(videoPath, buf);
+    }
+    const previewUrl = stored.url;
 
     try {
       const vibe = await extractFromUpload({
-        videoPath: dest,
+        videoPath,
         originalName: file.name,
         previewUrl,
         contentType,

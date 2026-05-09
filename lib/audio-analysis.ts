@@ -253,17 +253,25 @@ async function analyzeSlice(
   const format = audioFormatFromMime(slice.mime);
   const data = slice.buf.toString("base64");
 
+  // gpt-4o-audio-preview no longer accepts response_format at all
+  // (rejects both json_schema and json_object). The system prompt
+  // describes the required JSON shape; extractJson() pulls the JSON
+  // out of any prose wrapper and normalizeSlice() defends against
+  // partial fields.
   const resp = await client.chat.completions.create({
     model: SLICE_MODEL,
     modalities: ["text"],
     messages: [
-      { role: "system", content: SLICE_SYSTEM },
+      {
+        role: "system",
+        content: `${SLICE_SYSTEM}\n\nReturn ONLY a single JSON object, no prose, no markdown fences.`,
+      },
       {
         role: "user",
         content: [
           {
             type: "text",
-            text: `Slice label: ${slice.label}. Analyze ONLY this 10-second slice. Output JSON.`,
+            text: `Slice label: ${slice.label}. Analyze ONLY this 10-second slice. Output JSON only.`,
           },
           {
             type: "input_audio",
@@ -272,15 +280,11 @@ async function analyzeSlice(
         ],
       },
     ],
-    // gpt-4o-audio-preview doesn't accept response_format: json_schema
-    // (only json_object). The system prompt describes the required
-    // shape; normalizeSlice() defends against partial output.
-    response_format: { type: "json_object" },
   });
 
   const content = resp.choices[0]?.message?.content;
   if (!content) throw new Error(`slice ${slice.label}: empty content`);
-  const parsed = JSON.parse(content) as SliceResult;
+  const parsed = extractJson<SliceResult>(content, slice.label);
   return normalizeSlice(parsed);
 }
 
@@ -475,4 +479,22 @@ function audioFormatFromMime(mime: string): "mp3" | "wav" {
   const m = mime.toLowerCase();
   if (m.includes("wav") || m.includes("wave") || m.includes("x-wav")) return "wav";
   return "mp3";
+}
+
+// gpt-4o-audio-preview without response_format may wrap the JSON in
+// ```json ... ``` fences or trail prose. Strip fences, then locate the
+// outermost {...} block and parse that.
+function extractJson<T>(raw: string, label: string): T {
+  let s = raw.trim();
+  const fence = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(s);
+  if (fence) s = fence[1].trim();
+  if (s.startsWith("{") && s.endsWith("}")) {
+    return JSON.parse(s) as T;
+  }
+  const start = s.indexOf("{");
+  const end = s.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error(`slice ${label}: no JSON object found in response`);
+  }
+  return JSON.parse(s.slice(start, end + 1)) as T;
 }

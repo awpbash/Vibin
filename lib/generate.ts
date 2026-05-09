@@ -15,6 +15,7 @@
 
 import { spawn } from "child_process";
 import { promises as fs, createWriteStream } from "fs";
+import os from "os";
 import path from "path";
 import {
   generateMusic,
@@ -92,9 +93,7 @@ export async function generateMusicAsset(
   await ensureBrief(vibe);
   const prompt = vibe.creativeBrief?.musicPrompt ?? musicPromptFromVibe(vibe);
 
-  const dir = path.join(process.cwd(), "public", "generated");
-  await fs.mkdir(dir, { recursive: true });
-
+  // saveAsset() handles dir creation (local) or routing to Vercel Blob.
   let buf: Buffer;
   const extension = "mp3";
   let actualLengthMs = lengthMs;
@@ -105,7 +104,7 @@ export async function generateMusicAsset(
   // actual room recording on either side. Falls through to pure
   // elevenlabs if the vibe has no persisted source audio sample.
   if (MUSIC_BACKEND === "bridge") {
-    const tmp = path.join(process.cwd(), ".viber", "tmp", `bridge-src-${vibe.id}`);
+    const tmp = path.join(os.tmpdir(), "viber", `bridge-src-${vibe.id}`);
     const sourcePath = await sourceSampleAbsolutePath(vibe, tmp);
     if (!sourcePath) {
       console.warn(
@@ -185,7 +184,7 @@ async function bridgeSourceWithElevenLabs(
   prompt: string,
   sourcePath: string,
 ): Promise<{ buffer: Buffer; durationMs: number }> {
-  const tmp = path.join(process.cwd(), ".viber", "tmp", `bridge-${vibe.id}`);
+  const tmp = path.join(os.tmpdir(), "viber", `bridge-${vibe.id}`);
   await fs.mkdir(tmp, { recursive: true });
 
   // Tell ElevenLabs to behave like a continuation, not a fresh open. The
@@ -395,8 +394,11 @@ export async function generateVideoAsset(
     throw new Error("video gen needs FAL_API_KEY");
   }
 
-  const tmp = path.join(process.cwd(), ".viber", "tmp", `gen-${vibe.id}`);
-  const outDir = path.join(process.cwd(), "public", "generated");
+  // os.tmpdir() so this works on Vercel (only /tmp is writable). outDir
+  // is also under tmpdir; saveAsset() promotes the final mp4 to either
+  // /public/generated (local) or Vercel Blob.
+  const tmp = path.join(os.tmpdir(), "viber", `gen-${vibe.id}`);
+  const outDir = path.join(os.tmpdir(), "viber", `out-${vibe.id}`);
   await fs.mkdir(tmp, { recursive: true });
   await fs.mkdir(outDir, { recursive: true });
 
@@ -407,8 +409,10 @@ export async function generateVideoAsset(
     console.error("ensureBrief failed:", e);
   }
 
-  const cleanupTmp = () =>
+  const cleanupTmp = () => {
     fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+    fs.rm(outDir, { recursive: true, force: true }).catch(() => undefined);
+  };
 
   // chain mode is the default. Fal Veo image-to-video does the
   // continuations. If chain fails, drop to hero-only — never to stills.

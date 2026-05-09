@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import os from "os";
 import path from "path";
 import { promises as fs } from "fs";
 import { getVibe, saveVibe } from "@/lib/vibe-store";
@@ -7,8 +8,8 @@ import { readAsset } from "@/lib/storage";
 
 export const runtime = "nodejs";
 // Chain mode runs 4 Veo calls in parallel; each can take 60-180s.
-// Allow up to 10 minutes (Vercel pro/enterprise; on hobby this caps lower).
-export const maxDuration = 600;
+// Hobby plan caps at 300s; on Pro/Enterprise we could push higher.
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   let body: { vibeId?: string } = {};
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
   if (musicUrl) {
     if (musicUrl.startsWith("http://") || musicUrl.startsWith("https://")) {
       const buf = await readAsset(musicUrl);
-      const tmpDir = path.join(process.cwd(), ".viber", "tmp", `music-${vibe.id}`);
+      const tmpDir = path.join(os.tmpdir(), "viber", `music-${vibe.id}`);
       await fs.mkdir(tmpDir, { recursive: true });
       musicLocalPath = path.join(tmpDir, "music.mp3");
       await fs.writeFile(musicLocalPath, buf);

@@ -3,6 +3,7 @@ import { VibeInput } from "@/components/VibeInput";
 import { Polaroid } from "@/components/Polaroid";
 import { MobileActionBar } from "@/components/MobileActionBar";
 import { ScrollReveal } from "@/components/ScrollReveal";
+import { StakeholderCarousel } from "@/components/StakeholderCarousel";
 
 const HERO = [
   {
@@ -108,6 +109,16 @@ export default function Home() {
           </ScrollReveal>
         </section>
 
+        {/* ── Field Dispatches — stakeholder carousel ── */}
+        <ScrollReveal as="section" className="mt-24 md:mt-36" rootMargin="0px">
+          <div className="flex items-center gap-4 mb-10">
+            <p className="caption">from the field</p>
+            <span className="flex-1 border-t border-dotted border-[var(--color-rule-soft)]" />
+            <span className="caption text-[var(--color-ink-faint)]">field dispatches</span>
+          </div>
+          <StakeholderCarousel />
+        </ScrollReveal>
+
         <Footer />
       </main>
     </>
@@ -117,7 +128,7 @@ export default function Home() {
 function Header() {
   return (
     <div className="pt-6">
-      <div className="border-t-2 border-[var(--color-ink)] flex items-center justify-between pt-2 pb-3">
+      <div className="border-t-2 border-[var(--color-ink)] flex items-center justify-between pt-2 pb-3 reveal reveal-1">
         <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--color-ink-mute)]">
           field guide
         </span>
@@ -126,10 +137,10 @@ function Header() {
         </span>
       </div>
       <header className="flex items-baseline justify-between border-b border-[var(--color-rule)] pb-4 md:pb-5">
-        <Link href="/" className="display-italic text-[30px] md:text-[32px] tracking-tight">
+        <Link href="/" className="display-italic text-[30px] md:text-[32px] tracking-tight reveal reveal-2">
           viber<span className="text-[var(--color-stamp)]">.</span>
         </Link>
-        <div className="flex items-baseline gap-4 md:gap-5 caption">
+        <div className="flex items-baseline gap-4 md:gap-5 caption reveal reveal-3">
           <Link href="/wizard" className="link-underline hidden sm:inline">field lab</Link>
           <span className="hidden sm:inline">·</span>
           <span className="hidden sm:inline">edition no. 001</span>

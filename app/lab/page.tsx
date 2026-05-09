@@ -328,6 +328,18 @@ function KeyChip({ label, ok }: { label: string; ok: boolean }) {
   );
 }
 
+// ---------- Dev-only gate ----------
+
+// The Test Bench shows when ?dev=1 is in the URL. Public access to /lab
+// shows the routes panel + pipeline stepper but hides the per-API test
+// cards. This keeps the lab usable as a "what we did" tour without
+// looking like an unfinished workshop during a demo.
+function DevOnly({ children }: { children: React.ReactNode }) {
+  const params = useSearchParams();
+  if (params?.get("dev") !== "1") return null;
+  return <>{children}</>;
+}
+
 // ---------- Test Bench ----------
 
 type TestState = {

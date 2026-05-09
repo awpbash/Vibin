@@ -125,15 +125,16 @@ export function VibeStudio({
     }
   }
 
-  // Auto-run music + video on first load when nothing has been generated yet.
-  // The user can still manually regenerate with the buttons.
+  // Auto-run music on first load only — video is too slow to fire silently
+  // in the background (3-4 minutes in chain mode would hang the demo).
+  // Music is fast enough to stream in while the judge reads. User clicks
+  // 'render the picture' explicitly to start the video and watch the bar.
   useEffect(() => {
     if (autoRanRef.current) return;
     autoRanRef.current = true;
     const auto = new URLSearchParams(window.location.search).get("auto");
     if (auto === "0") return;
     if (musicStatus === "idle") void generateMusic();
-    if (videoStatus === "idle") void generateVideo();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -199,7 +200,7 @@ function Header({ issue, date }: { issue: number; date: string }) {
       <div className="flex items-baseline gap-5 caption">
         <Link href="/" className="hover:text-[var(--color-stamp)] transition-colors">back</Link>
         <span>·</span>
-        <Link href="/wizard" className="link-underline">field lab</Link>
+        <Link href="/lab" className="link-underline">field lab</Link>
         <span>·</span>
         <span className="tabular-nums">v.{String(issue).padStart(3, "0")}</span>
         <span>·</span>

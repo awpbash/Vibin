@@ -3,27 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { StampButton } from "./StampButton";
-
-const SAMPLES: Array<{ label: string; url: string; thumb: string }> = [
-  {
-    label: "tokyo coffee shop",
-    url: "https://www.youtube.com/watch?v=dx9aDku80kM",
-    thumb:
-      "https://images.unsplash.com/photo-1453614512568-c4024d13c247?auto=format&fit=crop&w=240&q=70",
-  },
-  {
-    label: "lisbon jazz bar",
-    url: "https://www.youtube.com/watch?v=lLxK5fEzaAU",
-    thumb:
-      "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=240&q=70",
-  },
-  {
-    label: "midnight hawker",
-    url: "https://www.youtube.com/watch?v=pBKlFnh96Tg",
-    thumb:
-      "https://images.unsplash.com/photo-1555126634-323283e090fa?auto=format&fit=crop&w=240&q=70",
-  },
-];
+import { RecordingOverlay } from "./RecordingOverlay";
+import { SAMPLES } from "@/lib/samples";
 
 type Phase = "idle" | "uploading" | "sensing" | "done" | "error";
 
@@ -33,6 +14,7 @@ export function VibeInput() {
   const [url, setUrl] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [showRecorder, setShowRecorder] = useState(false);
   const [pending, startTransition] = useTransition();
 
   async function go(input: { file?: File; url?: string }) {
@@ -69,13 +51,27 @@ export function VibeInput() {
 
   const busy = pending || phase === "uploading" || phase === "sensing";
 
+  function handleStampClick() {
+    if (busy) return;
+    setShowRecorder(true);
+  }
+
   return (
+    <>
+      {showRecorder && (
+        <RecordingOverlay
+          onCapture={(file) => { setShowRecorder(false); go({ file }); }}
+          onClose={() => setShowRecorder(false)}
+          onUploadFallback={() => fileRef.current?.click()}
+        />
+      )}
+
     <div className="flex flex-col items-start gap-7">
+      {/* Hidden input — file-picker fallback only (no capture attr so it opens a file dialog) */}
       <input
         ref={fileRef}
         type="file"
         accept="video/*"
-        capture="environment"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -95,15 +91,31 @@ export function VibeInput() {
             : "tap to record / upload"
         }
         serial="ed. 001 / sg"
-        onClick={() => fileRef.current?.click()}
+        onClick={handleStampClick}
         disabled={busy}
         busy={busy}
       />
 
-      <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-mute)] max-w-[44ch]">
-        fifteen seconds is enough. record any room you like and we will read
-        the palette, the soundscape, the music, the mood.
-      </p>
+      {/* "Start here" affordance — hidden while processing */}
+      {!busy && (
+        <div className="flex items-center gap-2.5 -mt-2">
+          <span className="bounce-hint font-mono text-[var(--color-stamp)]" style={{ fontSize: 15 }}>↑</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
+            start recording
+          </span>
+        </div>
+      )}
+
+      {/* Description */}
+      <div className="max-w-[34ch]">
+        <p className="display-italic text-[22px] text-[var(--color-ink)] mb-2 leading-[1.3]">
+          {busy ? "reading the room…" : "fifteen seconds is enough."}
+        </p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--color-ink-mute)] leading-[1.9]">
+          record any room — we read the palette,
+          soundscape, music, and mood.
+        </p>
+      </div>
 
       <div className="w-full max-w-[42rem] mt-4">
         <div className="flex items-baseline gap-3 mb-3">
@@ -118,9 +130,9 @@ export function VibeInput() {
             e.preventDefault();
             go({ url });
           }}
-          className="flex items-baseline gap-4 border-b border-[var(--color-rule)] pb-3"
+          className="field-input-wrap flex items-baseline gap-4 border-b border-[var(--color-rule)] pb-3"
         >
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-mute)] pt-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-mute)] pt-2 shrink-0">
             url /
           </span>
           <input
@@ -134,14 +146,14 @@ export function VibeInput() {
           <button
             type="submit"
             disabled={busy}
-            className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink)] hover:text-[var(--color-stamp)] transition-colors pt-2 disabled:opacity-40"
+            className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink)] hover:text-[var(--color-stamp)] transition-colors pt-2 disabled:opacity-40 shrink-0"
           >
-            {busy ? "..." : "go"}
+            {busy ? "·" : <>go <span className="arrow-nudge">→</span></>}
           </button>
         </form>
 
-        <div className="mt-5 flex flex-wrap gap-x-4 gap-y-3">
-          <span className="caption pt-2">try one</span>
+        <div className="mt-6 flex flex-wrap gap-x-5 gap-y-4">
+          <span className="caption pt-3 shrink-0">try one</span>
           {SAMPLES.map((s, i) => (
             <button
               key={s.url}
@@ -150,18 +162,29 @@ export function VibeInput() {
                 go({ url: s.url });
               }}
               disabled={busy}
-              className="group inline-flex items-center gap-2 disabled:opacity-40"
+              className="inline-flex items-center gap-3 disabled:opacity-40 hover:-translate-y-0.5 transition-transform duration-200"
             >
               <span
-                className="block w-8 h-8 bg-cover bg-center"
-                style={{ backgroundImage: `url(${s.thumb})` }}
+                className="wiggle-on-hover block shrink-0 border-[3px] border-[var(--color-paper-hi)]"
+                style={{
+                  width: 52,
+                  height: 52,
+                  backgroundImage: `url(${s.thumb})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  boxShadow: "var(--shadow-card)",
+                  transform: `rotate(${i % 2 === 0 ? -3 : 2.5}deg)`,
+                  ["--base" as string]: `${i % 2 === 0 ? -3 : 2.5}deg`,
+                }}
                 aria-hidden
               />
-              <span className="font-mono text-[10px] tabular-nums text-[var(--color-ink-faint)]">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <span className="display-italic text-[16px] text-[var(--color-ink)] link-underline">
-                {s.label}
+              <span>
+                <span className="block font-mono text-[10px] tabular-nums text-[var(--color-ink-faint)] mb-0.5">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="display-italic text-[17px] text-[var(--color-ink)] link-underline">
+                  {s.label}
+                </span>
               </span>
             </button>
           ))}
@@ -172,5 +195,6 @@ export function VibeInput() {
         <p className="font-mono text-xs text-[var(--color-stamp)]">{error}</p>
       ) : null}
     </div>
+    </>
   );
 }

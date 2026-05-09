@@ -11,6 +11,8 @@ type Props = {
   tape?: "top" | "tl" | "tr" | "tlr" | "none";
   className?: string;
   priority?: boolean;
+  /** Continuous idle motion variant — leave undefined for a static polaroid. */
+  float?: "a" | "b" | "c";
 };
 
 export function Polaroid({
@@ -24,16 +26,16 @@ export function Polaroid({
   tape = "tlr",
   className = "",
   priority = false,
+  float,
 }: Props) {
+  const floatClass = float ? `float-${float}` : "";
+  // When floating, the keyframes consume `--rot`; otherwise we apply rotate directly.
+  const style: React.CSSProperties = float
+    ? { width, ["--rot" as string]: rotate, transform: `rotate(${rotate})` }
+    : { width, transform: `rotate(${rotate})` };
+
   return (
-    <div
-      className={`polaroid ${className}`}
-      style={{
-        width,
-        transform: `rotate(${rotate})`,
-        animation: undefined,
-      }}
-    >
+    <div className={`polaroid ${floatClass} ${className}`} style={style}>
       {tape === "top" ? <TapeStrip top={-12} left="50%" tx="-50%" rot={-2} w={88} h={20} /> : null}
       {(tape === "tl" || tape === "tlr") ? (
         <TapeStrip top={-10} left={-14} rot={-22} w={70} h={18} />
@@ -51,7 +53,7 @@ export function Polaroid({
           alt={alt}
           fill
           sizes={`${width}px`}
-          className="object-cover"
+          className="polaroid-image object-cover"
           priority={priority}
         />
         <div

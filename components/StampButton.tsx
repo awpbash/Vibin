@@ -23,8 +23,9 @@ export const StampButton = forwardRef<HTMLButtonElement, Props>(function StampBu
       onClick={onClick}
       disabled={disabled}
       aria-busy={busy}
-      className={`stamp ${rotate ? "stamp-rotate" : ""} disabled:opacity-50`}
+      className={`stamp ${rotate ? "stamp-rotate" : ""} disabled:opacity-50 ${busy ? "stamp-busy" : ""}`}
     >
+      <span className="stamp-beacon" aria-hidden />
       <span className="stamp-ink" aria-hidden />
 
       {/* Curved serial along the top */}

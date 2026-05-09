@@ -157,8 +157,11 @@ export function Player({
         }}
       />
 
-      {/* Top bar */}
-      <div className="absolute top-0 inset-x-0 px-8 md:px-14 py-8 flex items-baseline justify-between">
+      {/* Top bar — with safe area inset for iPhone notch */}
+      <div
+        className="absolute top-0 inset-x-0 px-6 md:px-14 flex items-baseline justify-between"
+        style={{ paddingTop: "calc(1.5rem + env(safe-area-inset-top, 0px))" }}
+      >
         <Link
           href={`/v/${vibe.id}`}
           onClick={(e) => e.stopPropagation()}
@@ -167,36 +170,39 @@ export function Player({
           ← back
         </Link>
         <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#e9dcc6]/60 flex items-baseline gap-4">
-          <span>now playing</span>
+          <span className="hidden sm:inline">now playing</span>
           <span className="tabular-nums">
             {fmt(t)} / {fmt(duration)}
           </span>
         </div>
       </div>
 
-      {/* Title */}
-      <div className="absolute bottom-0 inset-x-0 px-8 md:px-14 pb-12 md:pb-16">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#e9dcc6]/50 mb-4">
+      {/* Title + progress — with safe area inset for iPhone home indicator */}
+      <div
+        className="absolute bottom-0 inset-x-0 px-6 md:px-14"
+        style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom, 0px))" }}
+      >
+        <p className="font-mono text-[10px] md:text-[11px] uppercase tracking-[0.22em] text-[#e9dcc6]/50 mb-3 md:mb-4">
           {vibe.musicAnchor.genre} · {vibe.musicAnchor.tempoBpm} bpm
           {vibe.musicAnchor.key ? ` · ${vibe.musicAnchor.key}` : ""}
         </p>
         <h1
-          className="display-xl text-[12vw] md:text-[7.5vw] leading-[0.92] text-[#f5f1ea]"
+          className="display-xl text-[13vw] md:text-[7.5vw] leading-[0.92] text-[#f5f1ea]"
           style={{ textShadow: "0 1px 30px rgba(0,0,0,0.4)" }}
         >
           {vibe.title}
         </h1>
-        <div className="mt-8 flex items-baseline justify-between border-t border-[#e9dcc6]/15 pt-4">
-          <span className="display-italic text-[18px] text-[#e9dcc6]/80 max-w-[40ch]">
+        <div className="mt-5 md:mt-8 flex items-end justify-between border-t border-[#e9dcc6]/15 pt-4 gap-4">
+          <span className="display-italic text-[16px] md:text-[18px] text-[#e9dcc6]/80 max-w-[34ch]">
             {vibe.oneLiner}
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#e9dcc6]/50">
-            {playing ? "click to pause · space" : "click to play · space"}
+          <span className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.18em] text-[#e9dcc6]/50 shrink-0 hidden sm:inline">
+            {playing ? "tap to pause" : "tap to play"}
           </span>
         </div>
 
-        {/* Progress */}
-        <div className="mt-6 h-px w-full bg-[#e9dcc6]/15 relative">
+        {/* Progress bar */}
+        <div className="mt-5 md:mt-6 h-px w-full bg-[#e9dcc6]/15 relative">
           <div
             className="absolute left-0 top-0 h-px"
             style={{
@@ -206,6 +212,11 @@ export function Player({
             }}
           />
         </div>
+
+        {/* Mobile tap hint */}
+        <p className="sm:hidden font-mono text-[9px] uppercase tracking-[0.18em] text-[#e9dcc6]/40 mt-3 text-center">
+          {playing ? "tap to pause" : "tap to play"}
+        </p>
       </div>
     </div>
   );

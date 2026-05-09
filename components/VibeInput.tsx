@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { StampButton } from "./StampButton";
+import { RecordingOverlay } from "./RecordingOverlay";
 import { SAMPLES } from "@/lib/samples";
 
 type Phase = "idle" | "uploading" | "sensing" | "done" | "error";
@@ -13,6 +14,7 @@ export function VibeInput() {
   const [url, setUrl] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [showRecorder, setShowRecorder] = useState(false);
   const [pending, startTransition] = useTransition();
 
   async function go(input: { file?: File; url?: string }) {
@@ -48,13 +50,27 @@ export function VibeInput() {
 
   const busy = pending || phase === "uploading" || phase === "sensing";
 
+  function handleStampClick() {
+    if (busy) return;
+    setShowRecorder(true);
+  }
+
   return (
+    <>
+      {showRecorder && (
+        <RecordingOverlay
+          onCapture={(file) => { setShowRecorder(false); go({ file }); }}
+          onClose={() => setShowRecorder(false)}
+          onUploadFallback={() => fileRef.current?.click()}
+        />
+      )}
+
     <div className="flex flex-col items-start gap-7">
+      {/* Hidden input — file-picker fallback only (no capture attr so it opens a file dialog) */}
       <input
         ref={fileRef}
         type="file"
         accept="video/*"
-        capture="environment"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -74,7 +90,7 @@ export function VibeInput() {
             : "tap to record / upload"
         }
         serial="ed. 001 / sg"
-        onClick={() => fileRef.current?.click()}
+        onClick={handleStampClick}
         disabled={busy}
         busy={busy}
       />
@@ -178,5 +194,6 @@ export function VibeInput() {
         <p className="font-mono text-xs text-[var(--color-stamp)]">{error}</p>
       ) : null}
     </div>
+    </>
   );
 }

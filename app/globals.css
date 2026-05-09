@@ -648,6 +648,34 @@ a:hover > .wiggle-on-hover {
 .scroll-reveal-stagger.in-view > *:nth-child(3) { transition-delay: 360ms; }
 .scroll-reveal-stagger.in-view > *:nth-child(4) { transition-delay: 500ms; }
 
+/* Recording overlay entrance */
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.overlay-in { animation: overlay-in 220ms ease both; }
+
+/* Recorder viewfinder button */
+.recorder-btn {
+  border: 1.5px solid var(--color-stamp);
+  color: var(--color-paper-hi);
+  background: transparent;
+  transition: background 180ms ease, color 180ms ease;
+}
+.recorder-btn:hover {
+  background: var(--color-stamp);
+}
+.recorder-btn-ghost {
+  border: 1.5px solid var(--color-stamp);
+  color: var(--color-stamp);
+  background: transparent;
+  transition: background 180ms ease, color 180ms ease;
+}
+.recorder-btn-ghost:hover {
+  background: var(--color-stamp);
+  color: var(--color-paper-hi);
+}
+
 /* Tape: very subtle flutter so the corners feel handheld */
 @keyframes tape-flutter {
   0%, 100% { opacity: 0.78; }

@@ -79,10 +79,26 @@ export function VibeInput() {
         busy={busy}
       />
 
-      <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-mute)] max-w-[44ch]">
-        fifteen seconds is enough. record any room you like and we will read
-        the palette, the soundscape, the music, the mood.
-      </p>
+      {/* "Start here" affordance — hidden while processing */}
+      {!busy && (
+        <div className="flex items-center gap-2.5 -mt-2">
+          <span className="bounce-hint font-mono text-[var(--color-stamp)]" style={{ fontSize: 15 }}>↑</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
+            start recording
+          </span>
+        </div>
+      )}
+
+      {/* Description */}
+      <div className="max-w-[34ch]">
+        <p className="display-italic text-[22px] text-[var(--color-ink)] mb-2 leading-[1.3]">
+          {busy ? "reading the room…" : "fifteen seconds is enough."}
+        </p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--color-ink-mute)] leading-[1.9]">
+          record any room — we read the palette,
+          soundscape, music, and mood.
+        </p>
+      </div>
 
       <div className="w-full max-w-[42rem] mt-4">
         <div className="flex items-baseline gap-3 mb-3">
@@ -115,7 +131,7 @@ export function VibeInput() {
             disabled={busy}
             className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink)] hover:text-[var(--color-stamp)] transition-colors pt-2 disabled:opacity-40 shrink-0"
           >
-            {busy ? "·" : "go →"}
+            {busy ? "·" : <>go <span className="arrow-nudge">→</span></>}
           </button>
         </form>
 
@@ -132,7 +148,7 @@ export function VibeInput() {
               className="inline-flex items-center gap-3 disabled:opacity-40 hover:-translate-y-0.5 transition-transform duration-200"
             >
               <span
-                className="block shrink-0 border-[3px] border-[var(--color-paper-hi)]"
+                className="wiggle-on-hover block shrink-0 border-[3px] border-[var(--color-paper-hi)]"
                 style={{
                   width: 52,
                   height: 52,
@@ -141,6 +157,7 @@ export function VibeInput() {
                   backgroundPosition: "center",
                   boxShadow: "var(--shadow-card)",
                   transform: `rotate(${i % 2 === 0 ? -3 : 2.5}deg)`,
+                  ["--base" as string]: `${i % 2 === 0 ? -3 : 2.5}deg`,
                 }}
                 aria-hidden
               />

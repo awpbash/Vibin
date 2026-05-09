@@ -149,11 +149,21 @@ main, header, footer { position: relative; z-index: 2; }
   padding: 14px 14px 56px 14px;
   box-shadow: var(--shadow-paper);
   filter: contrast(1.02) saturate(1.03);
-  transition: filter 350ms ease, box-shadow 350ms ease;
+  transition: filter 450ms ease, box-shadow 450ms ease, transform 600ms cubic-bezier(.2,.8,.2,1);
+  will-change: transform;
 }
 .polaroid:hover {
-  filter: contrast(1.05) saturate(1.08) brightness(1.01);
-  box-shadow: 0 12px 44px rgba(28, 24, 20, 0.26), 0 2px 6px rgba(28, 24, 20, 0.08);
+  filter: contrast(1.06) saturate(1.10) brightness(1.02);
+  box-shadow: 0 18px 52px rgba(28, 24, 20, 0.30), 0 2px 6px rgba(28, 24, 20, 0.10);
+  z-index: 5;
+}
+/* Image inside polaroid zooms gently on hover */
+.polaroid .polaroid-image {
+  transition: transform 1100ms cubic-bezier(.2,.8,.2,1), filter 600ms ease;
+}
+.polaroid:hover .polaroid-image {
+  transform: scale(1.06);
+  filter: contrast(1.04) saturate(1.06);
 }
 .polaroid::after {
   content: "";
@@ -453,6 +463,224 @@ main, header, footer { position: relative; z-index: 2; }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .drop-pin { animation: drop-pin 600ms cubic-bezier(.2,.9,.3,1.1) both; }
+
+/* ---------- Continuous motion (idle ambience) ---------- */
+
+/* Floating polaroids — three slightly different periods so the stack never
+   syncs up. Composed with a base rotation passed in via --rot. */
+@keyframes float-a {
+  0%, 100% { transform: rotate(var(--rot, 0deg)) translateY(0) translateX(0); }
+  50%      { transform: rotate(calc(var(--rot, 0deg) + 0.6deg)) translateY(-8px) translateX(2px); }
+}
+@keyframes float-b {
+  0%, 100% { transform: rotate(var(--rot, 0deg)) translateY(0) translateX(0); }
+  50%      { transform: rotate(calc(var(--rot, 0deg) - 0.5deg)) translateY(-6px) translateX(-3px); }
+}
+@keyframes float-c {
+  0%, 100% { transform: rotate(var(--rot, 0deg)) translateY(0) translateX(0); }
+  50%      { transform: rotate(calc(var(--rot, 0deg) + 0.4deg)) translateY(-10px) translateX(1px); }
+}
+.float-a { animation: float-a 7.2s ease-in-out infinite; }
+.float-b { animation: float-b 8.6s ease-in-out infinite; animation-delay: -1.4s; }
+.float-c { animation: float-c 9.4s ease-in-out infinite; animation-delay: -2.8s; }
+/* Hover should override the float so the polaroid doesn't fight the tilt */
+.float-a:hover, .float-b:hover, .float-c:hover {
+  animation-play-state: paused;
+  transform: rotate(0deg) translateY(-4px);
+}
+
+/* Gentle sway — pencil arrow, ribbons, decorative SVGs */
+@keyframes sway {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(-2deg); }
+}
+.sway { animation: sway 6s ease-in-out infinite; transform-origin: top left; }
+
+/* Breathing — for stamp / record button when idle */
+@keyframes breathe {
+  0%, 100% { transform: rotate(-7deg) scale(1);     filter: drop-shadow(0 0 0px  rgba(168,46,26,0));    }
+  50%      { transform: rotate(-7deg) scale(1.045); filter: drop-shadow(0 0 18px rgba(168,46,26,0.28)); }
+}
+.stamp.stamp-rotate:not(:hover):not(:active):not(:disabled) {
+  animation: breathe 4.2s ease-in-out infinite;
+}
+
+/* Beacon ring — radiates outward from the stamp to signal "tap me" */
+@keyframes stamp-beacon {
+  0%   { transform: scale(1);   opacity: 0.52; }
+  70%  { transform: scale(1.22); opacity: 0; }
+  100% { transform: scale(1.22); opacity: 0; }
+}
+.stamp-beacon {
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-stamp);
+  pointer-events: none;
+  animation: stamp-beacon 2.6s cubic-bezier(.4,0,.6,1) infinite;
+}
+.stamp-busy .stamp-beacon,
+.stamp:hover .stamp-beacon,
+.stamp:active .stamp-beacon {
+  animation-play-state: paused;
+  opacity: 0;
+}
+
+/* Bounce hint — gentle float for "start recording" annotation */
+@keyframes bounce-hint {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
+.bounce-hint { display: inline-block; animation: bounce-hint 1.7s ease-in-out infinite; }
+
+/* Underline draw — for eyebrow and section labels */
+@keyframes underline-draw {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.underline-draw {
+  position: relative;
+  display: inline-block;
+}
+.underline-draw::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 1px;
+  background: var(--color-stamp);
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: underline-draw 900ms cubic-bezier(.2,.8,.2,1) 1.4s both;
+}
+
+/* Arrow nudge — for the "go →" submit and link arrows */
+.arrow-nudge {
+  display: inline-block;
+  transition: transform 220ms cubic-bezier(.2,.8,.2,1);
+}
+button:hover .arrow-nudge,
+a:hover .arrow-nudge {
+  transform: translateX(4px);
+}
+
+/* Wiggle — for sample thumbnails on hover */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(var(--base, 0deg)); }
+  25%      { transform: rotate(calc(var(--base, 0deg) - 4deg)) translateY(-2px); }
+  75%      { transform: rotate(calc(var(--base, 0deg) + 4deg)) translateY(-2px); }
+}
+.wiggle-on-hover { transition: transform 200ms ease; }
+button:hover > .wiggle-on-hover,
+a:hover > .wiggle-on-hover {
+  animation: wiggle 700ms ease-in-out;
+}
+
+/* ---------- Hero headline clip-reveal ---------- */
+
+/* Each line is a clipping container — text rises up from behind it */
+.hero-line {
+  display: block;
+  overflow: hidden;
+  line-height: 1.02; /* slight buffer so descenders aren't clipped */
+}
+
+@keyframes hero-line-in {
+  from { transform: translateY(108%); }
+  to   { transform: translateY(0); }
+}
+
+.hero-word {
+  display: block;
+  animation: hero-line-in 960ms cubic-bezier(.16,1,.3,1) both;
+}
+
+.hero-line-1 .hero-word { animation-delay: 60ms; }
+.hero-line-2 .hero-word { animation-delay: 220ms; }
+.hero-line-3 .hero-word { animation-delay: 400ms; }
+
+/* The period on "sensed." — stamp-color, pulses gently after reveal */
+.hero-period {
+  color: var(--color-stamp);
+  display: inline-block;
+  animation: hero-period-pulse 3.5s ease-in-out infinite;
+  animation-delay: 1.8s;
+}
+@keyframes hero-period-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.22; }
+}
+
+/* Body paragraph — more dramatic entry than the standard reveal */
+@keyframes reveal-body {
+  from { opacity: 0; transform: translateY(36px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.reveal-body {
+  animation: reveal-body 1100ms cubic-bezier(.16,1,.3,1) both;
+}
+
+/* Scroll-reveal: starts hidden, .in-view applied by IntersectionObserver */
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 900ms cubic-bezier(.2,.8,.2,1),
+              transform 900ms cubic-bezier(.2,.8,.2,1);
+  will-change: opacity, transform;
+}
+.scroll-reveal.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+.scroll-reveal-stagger > * {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 700ms cubic-bezier(.2,.8,.2,1),
+              transform 700ms cubic-bezier(.2,.8,.2,1);
+}
+.scroll-reveal-stagger.in-view > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+.scroll-reveal-stagger.in-view > *:nth-child(1) { transition-delay: 80ms; }
+.scroll-reveal-stagger.in-view > *:nth-child(2) { transition-delay: 220ms; }
+.scroll-reveal-stagger.in-view > *:nth-child(3) { transition-delay: 360ms; }
+.scroll-reveal-stagger.in-view > *:nth-child(4) { transition-delay: 500ms; }
+
+/* Tape: very subtle flutter so the corners feel handheld */
+@keyframes tape-flutter {
+  0%, 100% { opacity: 0.78; }
+  50%      { opacity: 0.86; }
+}
+.tape { animation: tape-flutter 5.5s ease-in-out infinite; }
+
+/* Honor user preference */
+@media (prefers-reduced-motion: reduce) {
+  .float-a, .float-b, .float-c,
+  .sway, .tape,
+  .stamp.stamp-rotate:not(:hover):not(:active):not(:disabled),
+  .pulse-soft, .record-pulse {
+    animation: none !important;
+  }
+  .scroll-reveal, .scroll-reveal-stagger > * {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .reveal, .reveal-tilt-l, .reveal-tilt-r, .reveal-tilt-m {
+    animation-duration: 1ms !important;
+  }
+  .hero-word, .reveal-body {
+    animation: none !important;
+    transform: none !important;
+  }
+  .hero-period {
+    animation: none !important;
+  }
+  .stamp-beacon { animation: none !important; opacity: 0; }
+  .bounce-hint  { animation: none !important; }
+}
 
 ::selection {
   background: var(--color-stamp);

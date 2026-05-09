@@ -9,7 +9,15 @@ import { hasDatabase } from "@/lib/db/client";
 export const dynamic = "force-dynamic";
 
 export default async function ArchivePage() {
-  const vibes = await listVibes(100);
+  const all = await listVibes(100);
+  // Hide partially-baked entries — public archive only shows vibes that
+  // have both generated music and video. Drafts (extracted but no
+  // assets) stay invisible until they're fully rendered.
+  const vibes = all.filter(
+    (v) =>
+      Boolean(v.generatedAssets?.musicUrl) &&
+      Boolean(v.generatedAssets?.previewVideoUrl),
+  );
   const usingDb = hasDatabase();
 
   return (

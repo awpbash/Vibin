@@ -135,7 +135,7 @@ export default function Home() {
           <div className="flex items-baseline gap-4 mb-3">
             <p className="caption">the field, mapped</p>
             <span className="flex-1 border-t border-dotted border-[var(--color-rule-soft)]" />
-            <span className="caption text-[var(--color-ink-faint)] tabular-nums">03 vibes · sg</span>
+            <span className="caption text-[var(--color-ink-faint)] tabular-nums">02 vibes · sg</span>
           </div>
           <p className="display-italic text-[22px] md:text-[28px] text-[var(--color-ink-soft)] mb-8 max-w-[42ch] leading-tight">
             places, already sensed.

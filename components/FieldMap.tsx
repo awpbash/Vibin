@@ -23,40 +23,28 @@ type Spot = {
 
 const SPOTS: Spot[] = [
   {
-    id: "tokyo-coffee",
+    id: "v-moy4b7c0-x23j",
     num: "01",
-    name: "forty hands",
-    area: "tiong bahru",
-    vibe: "warm tungsten · bossa · late afternoon",
+    name: "rooftop brunch",
+    area: "tanjong pagar",
+    vibe: "sunlit · disco ball · midday",
     thumb:
-      "https://images.unsplash.com/photo-1453614512568-c4024d13c247?auto=format&fit=crop&w=320&q=70",
-    lat: 1.2855,
-    lng: 103.8316,
-    rotate: "-3deg",
+      "https://images.unsplash.com/photo-1559925393-8be0ec4767c8?auto=format&fit=crop&w=320&q=70",
+    lat: 1.2772,
+    lng: 103.8458,
+    rotate: "2deg",
   },
   {
-    id: "lisbon-jazz",
+    id: "v-moy6k90j-bog5",
     num: "02",
-    name: "maduro",
-    area: "dempsey hill",
-    vibe: "candlelit · modal jazz · late night",
+    name: "amber brass",
+    area: "chinatown",
+    vibe: "stone room · muted trumpet · afternoon",
     thumb:
       "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=320&q=70",
-    lat: 1.3047,
-    lng: 103.8095,
-    rotate: "4deg",
-  },
-  {
-    id: "midnight-hawker",
-    num: "03",
-    name: "maxwell centre",
-    area: "chinatown",
-    vibe: "fluorescent · wok smoke · communal",
-    thumb:
-      "https://images.unsplash.com/photo-1555126634-323283e090fa?auto=format&fit=crop&w=320&q=70",
-    lat: 1.2803,
-    lng: 103.8447,
-    rotate: "-2deg",
+    lat: 1.2837,
+    lng: 103.8443,
+    rotate: "-3deg",
   },
 ];
 
@@ -108,8 +96,10 @@ function projectPin(lat: number, lng: number) {
 // Pre-project all pins for trail path.
 const PIN_POSITIONS = SPOTS.map((s) => projectPin(s.lat, s.lng));
 
-// Curved expedition trail through the pins.
-const TRAIL_D = (() => {
+// Curved expedition trail through the pins. Needs ≥3 pins to draw a
+// quadratic-then-cubic curve; with fewer we skip the trail.
+const TRAIL_D: string | null = (() => {
+  if (PIN_POSITIONS.length < 3) return null;
   const [a, b, c] = PIN_POSITIONS;
   const ctrl1x = (a.x + b.x) / 2;
   const ctrl1y = (a.y + b.y) / 2 - 30;
@@ -203,17 +193,19 @@ export function FieldMap() {
             className="absolute inset-0 w-full h-full pointer-events-none"
             preserveAspectRatio="none"
           >
-            {/* Expedition trail */}
-            <path
-              d={TRAIL_D}
-              stroke="var(--color-stamp)"
-              strokeWidth="1.6"
-              fill="none"
-              strokeDasharray="3 5"
-              strokeLinecap="round"
-              className="trail-fade"
-              opacity="0"
-            />
+            {/* Expedition trail (only when 3+ pins) */}
+            {TRAIL_D ? (
+              <path
+                d={TRAIL_D}
+                stroke="var(--color-stamp)"
+                strokeWidth="1.6"
+                fill="none"
+                strokeDasharray="3 5"
+                strokeLinecap="round"
+                className="trail-fade"
+                opacity="0"
+              />
+            ) : null}
 
             {/* Compass rose (top-right) */}
             <g transform="translate(720, 70)" className="compass-spin">

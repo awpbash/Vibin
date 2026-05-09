@@ -269,8 +269,10 @@ Places are scored against the query vibe using **cosine similarity** over the `t
 
 ```
 VibeObject
-  ├─ GPT Image 2 × 4 → stills (1536×1024 PNG)  ~$0.68
-  ├─ Fal Veo 3 Fast (8s, 720p, with audio)       ~$1.20
+  ├─Initially was trained on Gemini 3.1 to generate video and music 
+  ├─ ElevenLabs
+  ├─ Fal Veo 3 Fast (8s, 720p, with audio)
+  ├─ OpenAI GPT 5.4 Chat
   └─ ffmpeg
        ├─ Ken Burns zoom on each still (zoompan)
        ├─ xfade transitions between stills

@@ -57,7 +57,7 @@
       "slow",
       "private"
     ],
-    "createdAt": 1778296755623
+    "createdAt": 1778302018517
   },
   "tokyo-coffee-upload-moxs08zj": {
     "id": "tokyo-coffee-upload-moxs08zj",
@@ -116,5 +116,181 @@
       "private"
     ],
     "createdAt": 1778296755623
+  },
+  "tokyo-coffee": {
+    "id": "tokyo-coffee",
+    "source": {
+      "kind": "youtube",
+      "url": "https://www.youtube.com/watch?v=dx9aDku80kM",
+      "title": "Tokyo coffee shop ambience, rain, jazz, 4 hours"
+    },
+    "title": "A Tokyo Coffee Shop, Late Afternoon",
+    "oneLiner": "Warm tungsten on stained wood. The espresso machine speaks every ninety seconds. Bossa at low volume.",
+    "palette": [
+      {
+        "name": "warm tungsten",
+        "hex": "#d4a059"
+      },
+      {
+        "name": "stained walnut",
+        "hex": "#5a3a26"
+      },
+      {
+        "name": "cream paper",
+        "hex": "#e9dcc6"
+      },
+      {
+        "name": "rain glass",
+        "hex": "#7d8a86"
+      }
+    ],
+    "lighting": "low, warm, indoor tungsten with one cool fill from a rain-streaked window",
+    "spatial": "intimate, low ceilings, narrow counter, eight to twelve seats visible",
+    "visualMotifs": [
+      "espresso machine",
+      "ceramic cups",
+      "open notebook",
+      "potted fern",
+      "rain on glass"
+    ],
+    "density": 0.45,
+    "energy": 0.28,
+    "timeOfDay": "afternoon",
+    "soundscape": [
+      "espresso machine, every 90s",
+      "low chatter, two languages",
+      "page turns",
+      "cup on saucer",
+      "rain, far"
+    ],
+    "musicAnchor": {
+      "genre": "bossa nova, sparse",
+      "tempoBpm": 92,
+      "key": "C major",
+      "referenceTrack": "Antonio Carlos Jobim, Águas de Março, instrumental"
+    },
+    "moodTags": [
+      "focused",
+      "cinematic",
+      "introspective",
+      "cozy"
+    ],
+    "createdAt": 1778302018517
+  },
+  "midnight-hawker": {
+    "id": "midnight-hawker",
+    "source": {
+      "kind": "youtube",
+      "url": "https://www.youtube.com/watch?v=pBKlFnh96Tg",
+      "title": "Midnight hawker centre, Singapore"
+    },
+    "title": "A Hawker Centre, Past Midnight",
+    "oneLiner": "Fluorescent green over plastic stools. Wok smoke. Three languages, none of them quiet.",
+    "palette": [
+      {
+        "name": "fluorescent green",
+        "hex": "#9bb86b"
+      },
+      {
+        "name": "wok char",
+        "hex": "#2a2620"
+      },
+      {
+        "name": "neon red",
+        "hex": "#c8412c"
+      },
+      {
+        "name": "plastic blue",
+        "hex": "#5a78a3"
+      }
+    ],
+    "lighting": "overhead fluorescents, hard, with red signage glow",
+    "spatial": "covered open-air, plastic stools, long communal tables, vast",
+    "visualMotifs": [
+      "wok flame",
+      "red paper menu",
+      "metal chopsticks",
+      "stainless steel trays",
+      "hanging fan"
+    ],
+    "density": 0.85,
+    "energy": 0.8,
+    "timeOfDay": "late-night",
+    "soundscape": [
+      "wok over flame",
+      "metal on metal",
+      "Hokkien, Mandarin, English",
+      "ceiling fan whir",
+      "ice scoop"
+    ],
+    "musicAnchor": {
+      "genre": "ambient bustle, no music",
+      "tempoBpm": 130
+    },
+    "moodTags": [
+      "alive",
+      "communal",
+      "unpretentious",
+      "sweaty"
+    ],
+    "createdAt": 1778302018517
+  },
+  "tokyo-coffee-upload-moxwg73b": {
+    "id": "tokyo-coffee-upload-moxwg73b",
+    "source": {
+      "kind": "capture"
+    },
+    "title": "A Lisbon Jazz Bar (you sensed), After Eleven",
+    "oneLiner": "Oxblood velvet and the warm hiss of vinyl. A trumpet that knows it is being listened to.",
+    "palette": [
+      {
+        "name": "oxblood velvet",
+        "hex": "#7e2a2a"
+      },
+      {
+        "name": "candle gold",
+        "hex": "#caa257"
+      },
+      {
+        "name": "deep ink",
+        "hex": "#1f1a18"
+      },
+      {
+        "name": "smoke grey",
+        "hex": "#5e5852"
+      }
+    ],
+    "lighting": "candlelight, table lamps, pools rather than wash",
+    "spatial": "low room, brick, small stage, twenty close seats",
+    "visualMotifs": [
+      "double bass leaning",
+      "wine glasses",
+      "vinyl on turntable",
+      "framed photos",
+      "ashtray on bar"
+    ],
+    "density": 0.7,
+    "energy": 0.55,
+    "timeOfDay": "late-night",
+    "soundscape": [
+      "muted trumpet",
+      "brushed snare",
+      "glass on wood",
+      "Portuguese, low",
+      "needle hiss"
+    ],
+    "musicAnchor": {
+      "genre": "modal jazz, late",
+      "tempoBpm": 78,
+      "key": "D minor",
+      "referenceTrack": "Miles Davis, Blue in Green, live"
+    },
+    "moodTags": [
+      "sultry",
+      "romantic",
+      "slow",
+      "private"
+    ],
+    "createdAt": 1778302018517
   }
 }

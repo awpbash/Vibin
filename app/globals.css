@@ -149,6 +149,11 @@ main, header, footer { position: relative; z-index: 2; }
   padding: 14px 14px 56px 14px;
   box-shadow: var(--shadow-paper);
   filter: contrast(1.02) saturate(1.03);
+  transition: filter 350ms ease, box-shadow 350ms ease;
+}
+.polaroid:hover {
+  filter: contrast(1.05) saturate(1.08) brightness(1.01);
+  box-shadow: 0 12px 44px rgba(28, 24, 20, 0.26), 0 2px 6px rgba(28, 24, 20, 0.08);
 }
 .polaroid::after {
   content: "";
@@ -270,6 +275,14 @@ main, header, footer { position: relative; z-index: 2; }
     inset 0 0 0 1px rgba(28, 24, 20, 0.05),
     0 1px 0 rgba(28, 24, 20, 0.04),
     0 4px 10px rgba(28, 24, 20, 0.10);
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+.paint-chip:hover {
+  transform: translateY(-3px) scale(1.015);
+  box-shadow:
+    inset 0 0 0 1px rgba(28, 24, 20, 0.05),
+    0 1px 0 rgba(28, 24, 20, 0.04),
+    0 10px 24px rgba(28, 24, 20, 0.18);
 }
 .paint-chip-tab {
   background: var(--color-paper-hi);
@@ -288,6 +301,62 @@ main, header, footer { position: relative; z-index: 2; }
     inset -1px -1px 2px rgba(0, 0, 0, 0.45),
     0 2px 3px rgba(28, 24, 20, 0.4),
     0 0 0 1px rgba(28, 24, 20, 0.2);
+}
+
+/* ---------- Paper fold corner ---------- */
+
+.paper-fold {
+  position: relative;
+}
+.paper-fold::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 0 26px 26px;
+  border-color: transparent transparent var(--color-paper-shadow) transparent;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+/* ---------- Data meters ---------- */
+
+.meter-track {
+  flex-shrink: 0;
+  width: 48px;
+  height: 2px;
+  background: var(--color-rule-soft);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.meter-fill {
+  height: 100%;
+  background: var(--color-ink);
+  border-radius: 2px;
+}
+
+/* ---------- URL input focus indicator ---------- */
+
+.field-input-wrap {
+  position: relative;
+}
+.field-input-wrap::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--color-stamp);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 300ms cubic-bezier(.2,.8,.2,1);
+}
+.field-input-wrap:focus-within::after {
+  transform: scaleX(1);
 }
 
 /* ---------- Inputs ---------- */
@@ -359,6 +428,26 @@ main, header, footer { position: relative; z-index: 2; }
 @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 .pulse-soft { animation: pulse-soft 2400ms ease-in-out infinite; }
 
+@keyframes shimmer-sweep {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.stamp-busy .stamp-ink {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(168, 46, 26, 0.0) 20%,
+      rgba(168, 46, 26, 0.28) 50%,
+      rgba(168, 46, 26, 0.0) 80%
+    ),
+    radial-gradient(rgba(168, 46, 26, 0.18) 1.5px, transparent 1.6px) 0 0 / 5px 5px,
+    radial-gradient(rgba(168, 46, 26, 0.10) 1px, transparent 1.2px) 2px 1px / 9px 9px;
+  background-size: 200% 100%, 5px 5px, 9px 9px;
+  animation: shimmer-sweep 2s linear infinite;
+  mix-blend-mode: multiply;
+  opacity: 0.8;
+}
+
 @keyframes drop-pin {
   from { opacity: 0; transform: translateY(-10px) scale(0.85); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -372,3 +461,83 @@ main, header, footer { position: relative; z-index: 2; }
 
 ::-webkit-scrollbar { width: 0; height: 0; }
 * { scrollbar-width: none; }
+
+/* ---------- Mobile / Phone ---------- */
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* Frosted-glass bottom bar */
+.mobile-bar {
+  background: rgba(236, 227, 210, 0.88);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  backdrop-filter: blur(24px) saturate(1.3);
+  border-top: 1px solid rgba(28, 24, 20, 0.10);
+}
+
+/* Frosted drawer above the bar */
+.mobile-drawer {
+  background: rgba(244, 236, 220, 0.96);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(28, 24, 20, 0.08);
+}
+
+/* Minimum touch target on mobile */
+@media (max-width: 768px) {
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Larger base font on small screens for readability */
+  html, body {
+    font-size: 16px;
+  }
+
+  /* Slightly less aggressive letter-spacing on mono captions at small sizes */
+  .eyebrow { letter-spacing: 0.12em; }
+  .caption  { letter-spacing: 0.10em; }
+}
+
+/* Bottom-safe padding utility */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* On mobile: reserve space for the fixed bottom action bar */
+.pb-mobile-bar {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .pb-mobile-bar {
+    padding-bottom: 5rem;
+  }
+}
+
+/* Mobile section card */
+@media (max-width: 768px) {
+  .mobile-section-card {
+    background: var(--color-paper-hi);
+    margin-inline: -1.5rem;
+    padding: 1.5rem;
+    border-top: 1px solid rgba(28, 24, 20, 0.06);
+  }
+}
+
+/* Record pulse ring — shown when camera is being triggered */
+@keyframes record-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(168, 46, 26, 0.5); }
+  70%  { box-shadow: 0 0 0 14px rgba(168, 46, 26, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(168, 46, 26, 0); }
+}
+.record-pulse {
+  animation: record-pulse 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

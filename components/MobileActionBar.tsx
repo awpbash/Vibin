@@ -75,7 +75,7 @@ export function MobileActionBar() {
                 className="flex flex-col items-center gap-1.5 shrink-0 disabled:opacity-40"
               >
                 <span
-                  className="block border-[3px] border-[var(--color-paper-hi)]"
+                  className="wiggle-on-hover block border-[3px] border-[var(--color-paper-hi)]"
                   style={{
                     width: 52,
                     height: 52,
@@ -84,6 +84,7 @@ export function MobileActionBar() {
                     backgroundPosition: "center",
                     boxShadow: "var(--shadow-card)",
                     transform: `rotate(${i % 2 === 0 ? -3 : 2.5}deg)`,
+                    ["--base" as string]: `${i % 2 === 0 ? -3 : 2.5}deg`,
                   }}
                   aria-hidden
                 />

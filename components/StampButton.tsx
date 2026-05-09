@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef } from "react";
+import { CoffeeSpinner } from "./CoffeeSpinner";
 
 type Props = {
   onClick?: () => void;
@@ -74,9 +75,13 @@ export const StampButton = forwardRef<HTMLButtonElement, Props>(function StampBu
       <span className="relative flex flex-col items-center gap-1.5">
         <span
           className="display-italic leading-none"
-          style={{ fontSize: 56, color: "currentColor" }}
+          style={{
+            fontSize: busy ? 38 : 56,
+            color: "currentColor",
+            transition: "font-size 200ms ease-out",
+          }}
         >
-          {busy ? "..." : primary}
+          {primary}
         </span>
         <span
           className="font-mono text-[10px] tracking-[0.22em] uppercase"
@@ -84,6 +89,7 @@ export const StampButton = forwardRef<HTMLButtonElement, Props>(function StampBu
         >
           {secondary}
         </span>
+        {busy ? <CoffeeSpinner size="xs" className="mt-1" /> : null}
       </span>
 
       {/* Six small notches around the perimeter for stamp character */}

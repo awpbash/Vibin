@@ -1,0 +1,192 @@
+/* Coffee Pour Animations */
+@keyframes pour-1 {
+  0%, 100% {
+    transform: scaleY(0.8);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scaleY(1.2);
+    opacity: 1;
+  }
+}
+
+@keyframes pour-2 {
+  0%, 100% {
+    transform: scaleY(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scaleY(0.7);
+    opacity: 1;
+  }
+}
+
+@keyframes pour-3 {
+  0%, 100% {
+    transform: scaleY(0.9);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scaleY(1.1);
+    opacity: 1;
+  }
+}
+
+/* Dripping Animation */
+@keyframes drip-1 {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(8px) scale(0.5);
+    opacity: 0.3;
+  }
+}
+
+@keyframes drip-2 {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  60% {
+    transform: translateY(10px) scale(0.4);
+    opacity: 0.2;
+  }
+}
+
+@keyframes drip-3 {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  40% {
+    transform: translateY(6px) scale(0.6);
+    opacity: 0.4;
+  }
+}
+
+/* Coffee Fill Animation */
+@keyframes fill {
+  0%, 100% {
+    transform: scaleY(0.6);
+    transform-origin: bottom;
+  }
+  50% {
+    transform: scaleY(1);
+    transform-origin: bottom;
+  }
+}
+
+/* Coffee Surface Shimmer */
+@keyframes shimmer {
+  0%, 100% {
+    transform: translateX(-100%);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateX(100%);
+    opacity: 0.6;
+  }
+}
+
+/* Ripple Effect */
+@keyframes ripple {
+  0%, 100% {
+    transform: translateX(-50%) scaleX(0.5);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateX(-50%) scaleX(2);
+    opacity: 0.1;
+  }
+}
+
+/* Steam Animations */
+@keyframes steam-1 {
+  0%, 100% {
+    transform: translateY(0) scaleY(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateY(-6px) scaleY(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes steam-2 {
+  0%, 100% {
+    transform: translateY(0) scaleY(1) translateX(0);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-8px) scaleY(1.3) translateX(2px);
+    opacity: 0;
+  }
+}
+
+@keyframes steam-3 {
+  0%, 100% {
+    transform: translateY(0) scaleY(1) translateX(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateY(-5px) scaleY(1.4) translateX(-2px);
+    opacity: 0;
+  }
+}
+
+/* Animation Classes */
+.animate-pour-1 {
+  animation: pour-1 1.2s ease-in-out infinite;
+}
+
+.animate-pour-2 {
+  animation: pour-2 1s ease-in-out infinite;
+  animation-delay: 0.1s;
+}
+
+.animate-pour-3 {
+  animation: pour-3 1.4s ease-in-out infinite;
+  animation-delay: 0.2s;
+}
+
+.animate-drip-1 {
+  animation: drip-1 0.8s ease-in-out infinite;
+}
+
+.animate-drip-2 {
+  animation: drip-2 1s ease-in-out infinite;
+  animation-delay: 0.15s;
+}
+
+.animate-drip-3 {
+  animation: drip-3 0.9s ease-in-out infinite;
+  animation-delay: 0.3s;
+}
+
+.animate-fill {
+  animation: fill 2.5s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+.animate-ripple {
+  animation: ripple 1.5s ease-in-out infinite;
+}
+
+.animate-steam-1 {
+  animation: steam-1 2s ease-out infinite;
+}
+
+.animate-steam-2 {
+  animation: steam-2 2.2s ease-out infinite;
+  animation-delay: 0.3s;
+}
+
+.animate-steam-3 {
+  animation: steam-3 1.8s ease-out infinite;
+  animation-delay: 0.6s;
+}

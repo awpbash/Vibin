@@ -6,6 +6,7 @@ import { NearbyMap } from "@/components/NearbyMap";
 import { PaintChips } from "@/components/PaintChips";
 import { PlaceCard } from "@/components/PlaceCard";
 import { Polaroid } from "@/components/Polaroid";
+import { VideoPolaroid } from "@/components/VideoPolaroid";
 import { StickyPlayer } from "@/components/StickyPlayer";
 import { AutoGenerateVideo } from "@/components/AutoGenerateVideo";
 import type { Place, VibeObject } from "@/lib/types";
@@ -76,19 +77,42 @@ export default async function VibePage({
         </div>
 
         <div className="col-span-12 lg:col-span-5 reveal reveal-5">
-          {/* On mobile: full bleed, no fixed width. On desktop: right-aligned fixed. */}
-          <div className="md:ml-auto" style={{ maxWidth: "100%" }}>
-            <Polaroid
-              src={cover}
-              alt={vibe.title}
-              caption={`fld. ${String(issue).padStart(3, "0")}`}
-              num={date}
-              rotate="3deg"
-              tape="tlr"
-              width={360}
-              height={400}
-              priority
-            />
+          {/* On mobile: full bleed, no fixed width. On desktop: right-aligned fixed.
+              Polaroid sits center; the play stamp sits above-right as a
+              little corner stamp so the primary CTA is reachable without
+              scrolling all the way down. */}
+          <div className="relative md:ml-auto" style={{ maxWidth: "100%" }}>
+            {vibe.source.kind === "capture" && vibe.source.previewUrl ? (
+              <VideoPolaroid
+                src={vibe.source.previewUrl}
+                caption={`fld. ${String(issue).padStart(3, "0")}`}
+                num={date}
+                rotate="3deg"
+                tape="tlr"
+                width={360}
+                height={400}
+              />
+            ) : (
+              <Polaroid
+                src={cover}
+                alt={vibe.title}
+                caption={`fld. ${String(issue).padStart(3, "0")}`}
+                num={date}
+                rotate="3deg"
+                tape="tlr"
+                width={360}
+                height={400}
+                priority
+              />
+            )}
+
+            <Link
+              href={`/v/${vibe.id}/play`}
+              className="absolute -top-6 -right-4 md:-top-8 md:-right-6 inline-flex z-10"
+              aria-label="play this vibe"
+            >
+              <PlayStampSmall />
+            </Link>
           </div>
         </div>
       </section>
@@ -373,6 +397,61 @@ function Row({
         {v}
       </dd>
     </div>
+  );
+}
+
+function PlayStampSmall() {
+  // Compact corner stamp pinned to the hero polaroid. Smaller than the
+  // editorial closing stamp so it doesn't fight the masthead.
+  return (
+    <span
+      className="stamp stamp-rotate"
+      style={{
+        color: "var(--color-stamp-ink)",
+        cursor: "pointer",
+        width: 132,
+        height: 132,
+        transform: "rotate(-9deg)",
+      }}
+    >
+      <span className="stamp-ink" aria-hidden />
+      <svg
+        width="132"
+        height="132"
+        viewBox="0 0 132 132"
+        className="absolute inset-0 pointer-events-none"
+        aria-hidden
+      >
+        <defs>
+          <path id="stamp-arc-top-3" d="M 18,66 A 48,48 0 0,1 114,66" />
+        </defs>
+        <text
+          fill="currentColor"
+          fontFamily="var(--font-mono)"
+          fontSize="8"
+          letterSpacing="2"
+          opacity="0.85"
+        >
+          <textPath href="#stamp-arc-top-3" startOffset="50%" textAnchor="middle">
+            VIBER · 0:90 · PRESS
+          </textPath>
+        </text>
+      </svg>
+      <span className="relative flex flex-col items-center gap-0.5">
+        <span
+          className="display-italic leading-none"
+          style={{ fontSize: 30, color: "currentColor" }}
+        >
+          play
+        </span>
+        <span
+          className="font-mono uppercase tracking-[0.18em]"
+          style={{ fontSize: 8, color: "currentColor", opacity: 0.85 }}
+        >
+          this vibe
+        </span>
+      </span>
+    </span>
   );
 }
 

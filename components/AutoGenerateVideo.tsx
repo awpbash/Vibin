@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CoffeeSpinner } from "./CoffeeSpinner";
 
 type Stage = "idle" | "brief" | "veo" | "stitch" | "done" | "error";
 
@@ -139,18 +140,21 @@ function Banner({
 }) {
   return (
     <div
-      className="fixed top-0 left-0 right-0 z-50 border-b border-[var(--color-rule)]"
+      className="fixed left-0 right-0 z-40 border-t border-[var(--color-rule)] shadow-[0_-1px_0_rgba(28,24,20,0.04)]"
       style={{
+        // Sit just above the StickyPlayer (≈ 64–80px tall depending on
+        // safe-area). Using calc keeps it pinned to the player's top
+        // edge even on iOS notched devices.
+        bottom: "calc(64px + env(safe-area-inset-bottom, 0px))",
         background: "var(--color-paper-hi)",
-        paddingTop: "env(safe-area-inset-top)",
       }}
     >
       <div className="px-6 md:px-14 lg:px-20 py-2.5 flex items-center gap-4">
-        <span
-          className={`shrink-0 w-2 h-2 rounded-full ${
-            isError ? "bg-[var(--color-stamp)]" : "bg-[var(--color-stamp)] animate-pulse"
-          }`}
-        />
+        {isError ? (
+          <span className="shrink-0 w-2 h-2 rounded-full bg-[var(--color-stamp)]" />
+        ) : (
+          <CoffeeSpinner size="xs" className="shrink-0" />
+        )}
         <div className="min-w-0 flex-1">
           <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--color-ink)]">
             {label}

@@ -88,25 +88,39 @@ export function Player({
 
   const paletteHexes = vibe.palette.map((c) => c.hex);
   const progress = duration > 0 ? Math.min(100, (t / duration) * 100) : 0;
-  const c0 = paletteHexes[0] ?? "#1a1d1a";
-  const c1 = paletteHexes[1] ?? "#2a2d2a";
-  const c2 = paletteHexes[2] ?? "#1a1d1a";
-  const c3 = paletteHexes[3] ?? c1;
+  const c1 = paletteHexes[1] ?? paletteHexes[0] ?? "#2a2d2a";
 
-  // Beat-driven pulse. Tempo from the same VibeObject the palette came
-  // from — so the room visibly breathes with the music. We compute
-  // phase ∈ [0,1) per beat, then a sharp-attack/slow-decay curve so it
-  // reads as a heartbeat rather than a sine wave.
+  // Mood drives the breath period. Calm/sparse vibes breathe slowly
+  // (≈28s for a full cycle), intense/dense ones breathe faster (≈7s).
+  // We use density+energy as the "intensity" axis. The wash layers
+  // crossfade with offset phase so the room melts between palette
+  // colors instead of strobing.
   const tempoBpm = Math.max(40, Math.min(200, vibe.musicAnchor?.tempoBpm || 90));
+  const moodIntensity = clamp01(((vibe.density ?? 0.5) + (vibe.energy ?? 0.5)) / 2);
+  const cyclePeriod = 28 - moodIntensity * 21; // 28s calm → 7s intense
+  const TWO_PI = Math.PI * 2;
+
+  // Per-color layer: opacity and center drift on offset phases.
+  const washColors = paletteHexes.slice(0, 4);
+  const layers = washColors.map((hex, i) => {
+    const phase = (t / cyclePeriod + i / Math.max(1, washColors.length)) * TWO_PI;
+    const op = 0.18 + 0.22 * (Math.sin(phase) + 1) / 2; // 0.18..0.40
+    const cx = 50 + Math.sin(phase * 0.7) * 28;
+    const cy = 50 + Math.cos(phase * 0.9) * 22;
+    return { hex, op, cx, cy };
+  });
+
+  // Vignette breathes on a longer cycle with a tiny swing — keeps the
+  // edges alive without flashing. ~1.5× the wash period.
+  const vignettePhase = (t / (cyclePeriod * 1.5)) * TWO_PI;
+  const vignetteAlpha = 0.55 + 0.10 * (Math.sin(vignettePhase) + 1) / 2; // 0.55..0.65
+
+  // Ambient lights stay beat-tied (those are Hue, they ARE supposed to
+  // pulse) but with a gentler swing and ease-out transitions.
   const beatsPerSec = tempoBpm / 60;
   const beatPhase = (t * beatsPerSec) % 1;
-  // 1.0 at the downbeat → decays to ~0.15 by the end of the beat
-  const pulse = Math.max(0.15, 1 - Math.pow(beatPhase, 0.5));
+  const beatPulse = Math.max(0, 1 - Math.pow(beatPhase, 0.6));
   const beatIndex = Math.floor(t * beatsPerSec);
-
-  // Map pulse to per-effect intensities.
-  const washOpacity = 0.4 + pulse * 0.35; // wash 0.40 → 0.75
-  const vignetteAlpha = 0.55 + pulse * 0.35; // vignette 0.55 → 0.90 (hex aa..ee)
 
   return (
     <div
@@ -148,67 +162,65 @@ export function Player({
         />
       ) : null}
 
-      {/* Cinematic background: layered radial gradients of the palette,
-          slow zoom for Ken Burns effect. When a video plays we keep the
-          gradient on top at lower opacity with a multiply blend so the
-          palette tints the footage instead of being hidden. */}
+      {/* Layered palette breath — one radial gradient per palette color,
+          each crossfading on its own phase. The room melts between
+          colors over `cyclePeriod` seconds (long for calm vibes, short
+          for intense ones) instead of strobing per beat. */}
+      <div className="absolute inset-0 pointer-events-none">
+        {layers.map((L, i) => (
+          <div
+            key={i}
+            className="absolute inset-0"
+            style={{
+              background: `radial-gradient(ellipse 75% 55% at ${L.cx}% ${L.cy}%, ${L.hex} 0%, transparent 60%)`,
+              opacity: previewUrl ? L.op * 0.9 : Math.min(0.55, L.op * 1.6),
+              mixBlendMode: previewUrl ? "soft-light" : "normal",
+              transition: "opacity 1200ms ease-in-out",
+              willChange: "opacity",
+            }}
+          />
+        ))}
+        {/* Solid base when there's no video so the screen never goes black */}
+        {previewUrl ? null : (
+          <div
+            className="absolute inset-0"
+            style={{ background: "#0e0f0e", zIndex: -1 }}
+          />
+        )}
+      </div>
+
+      {/* Slow Ken-Burns drift on the whole gradient stack */}
       <div
         className="absolute inset-0 pointer-events-none"
+        aria-hidden
         style={{
-          background: `
-            radial-gradient(ellipse 70% 50% at 25% 25%, ${c0}aa 0%, transparent 60%),
-            radial-gradient(ellipse 60% 50% at 75% 80%, ${c1}aa 0%, transparent 55%),
-            radial-gradient(ellipse 50% 40% at 60% 40%, ${c2}55 0%, transparent 60%),
-            radial-gradient(ellipse 40% 30% at 30% 70%, ${c3}55 0%, transparent 55%),
-            ${previewUrl ? "transparent" : "#0e0f0e"}
-          `,
-          transform: `scale(${1 + (t / Math.max(duration, 1)) * 0.18})`,
+          transform: `scale(${1 + (t / Math.max(duration, 1)) * 0.12})`,
           transformOrigin: "55% 50%",
-          transition: "transform 250ms linear, opacity 600ms ease",
-          mixBlendMode: previewUrl ? "soft-light" : "normal",
-          opacity: previewUrl ? 0.85 : 1,
+          transition: "transform 800ms linear",
         }}
       />
 
-      {/* Palette wash — second pass on top of the video at screen blend
-          so the dominant accent colors lift visibly through the footage.
-          Opacity pulses with the beat so the room breathes with the music. */}
-      {previewUrl ? (
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: `
-              radial-gradient(ellipse 80% 60% at 30% 30%, ${c0}77 0%, transparent 60%),
-              radial-gradient(ellipse 70% 60% at 70% 75%, ${c1}77 0%, transparent 55%)
-            `,
-            mixBlendMode: "screen",
-            opacity: washOpacity,
-            transition: "opacity 80ms linear",
-          }}
-        />
-      ) : null}
-
-      {/* Slow drifting bands */}
+      {/* Slow drifting line bands — angle creeps over time, no per-frame thrash */}
       <div
-        className="absolute inset-0 mix-blend-screen opacity-40"
+        className="absolute inset-0 mix-blend-screen opacity-25 pointer-events-none"
         style={{
           background: `repeating-linear-gradient(
-            ${30 + t * 0.5}deg,
+            ${30 + t * 0.25}deg,
             transparent 0px,
-            transparent 80px,
-            ${c1}22 80px,
-            ${c1}22 81px
+            transparent 90px,
+            ${c1}1a 90px,
+            ${c1}1a 91px
           )`,
+          transition: "background 1200ms linear",
         }}
       />
 
-      {/* Vignette — palette-tinted edge so the corners read as the
-          dominant accent. The alpha breathes with the beat. */}
+      {/* Vignette — palette-tinted edge, very gentle long breath */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background: `radial-gradient(ellipse 80% 60% at 50% 50%, transparent 45%, ${c1}${toHexAlpha(vignetteAlpha)} 100%)`,
-          transition: "background 80ms linear",
+          transition: "background 1500ms ease-in-out",
         }}
       />
 
@@ -248,7 +260,7 @@ export function Player({
           real hardware on stage. */}
       <AmbientLightsPanel
         hexes={paletteHexes}
-        pulse={pulse}
+        pulse={beatPulse}
         beatIndex={beatIndex}
         tempoBpm={tempoBpm}
       />
@@ -311,6 +323,10 @@ function toHexAlpha(a: number): string {
     .padStart(2, "0");
 }
 
+function clamp01(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
 // Floating top-right card. Three to four bulb dots, one per palette
 // color, each pulsing with the beat. Lead bulb — the one tied to the
 // "downbeat" — flares brighter on each new beat. Subtitle cycles
@@ -345,8 +361,9 @@ function AmbientLightsPanel({
         <div className="flex items-center gap-1.5">
           {bulbs.map((hex, i) => {
             const isLead = i === beatIndex % bulbs.length;
-            const intensity = isLead ? 0.55 + pulse * 0.45 : 0.45 + pulse * 0.2;
-            const scale = isLead ? 1 + pulse * 0.35 : 1 + pulse * 0.12;
+            // Gentler swing than before — bulbs warm/cool, never strobe.
+            const intensity = isLead ? 0.7 + pulse * 0.2 : 0.55 + pulse * 0.08;
+            const scale = isLead ? 1 + pulse * 0.18 : 1 + pulse * 0.05;
             return (
               <span
                 key={i}
@@ -357,8 +374,9 @@ function AmbientLightsPanel({
                   background: hex,
                   opacity: intensity,
                   transform: `scale(${scale})`,
-                  boxShadow: `0 0 ${Math.round(8 + pulse * 14)}px ${hex}`,
-                  transition: "transform 80ms linear, opacity 80ms linear, box-shadow 80ms linear",
+                  boxShadow: `0 0 ${Math.round(6 + pulse * 8)}px ${hex}`,
+                  transition:
+                    "transform 320ms ease-out, opacity 320ms ease-out, box-shadow 320ms ease-out",
                 }}
               />
             );

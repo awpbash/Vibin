@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { SAMPLES } from "@/lib/samples";
+import { CoffeeSpinner } from "./CoffeeSpinner";
 
 type Phase = "idle" | "uploading" | "sensing" | "done" | "error";
 
@@ -172,12 +173,7 @@ export function MobileActionBar() {
           }}
         >
           {busy ? (
-            <span
-              className="font-mono text-[var(--color-paper-hi)] uppercase tracking-[0.12em]"
-              style={{ fontSize: 11 }}
-            >
-              {phase === "uploading" ? "↑" : "···"}
-            </span>
+            <CoffeeSpinner size="xs" />
           ) : (
             /* Inner white dot — the "record" icon */
             <span

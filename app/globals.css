@@ -59,6 +59,15 @@ body {
     radial-gradient(ellipse 90% 60% at 18% 12%, var(--vibe-tint-1) 0%, transparent 60%),
     radial-gradient(ellipse 70% 50% at 88% 92%, var(--vibe-tint-2) 0%, transparent 60%);
   background-attachment: fixed;
+  background-position: 0px 0px, 0px 0px;
+  animation: bg-drift 55s ease-in-out infinite;
+}
+
+/* Background gradient blobs drift slowly — makes the paper feel alive */
+@keyframes bg-drift {
+  0%, 100% { background-position: 0px   0px,   0px   0px;  }
+  33%       { background-position: 28px  -18px, -22px 14px; }
+  66%       { background-position: -14px 22px,  18px  -26px; }
 }
 
 body::before {
@@ -74,6 +83,16 @@ body::before {
   background-position: 0 0, 1px 2px;
   opacity: 0.7;
   mix-blend-mode: multiply;
+  /* Film grain slowly drifts like real analogue texture */
+  animation: grain-drift 18s linear infinite;
+}
+
+@keyframes grain-drift {
+  0%   { background-position: 0px 0px,  1px 2px; }
+  25%  { background-position: -3px 2px, -1px 4px; }
+  50%  { background-position: 2px -1px, 4px 1px;  }
+  75%  { background-position: -1px 3px, 0px 0px;  }
+  100% { background-position: 0px 0px,  1px 2px;  }
 }
 
 body::after {
@@ -662,6 +681,30 @@ a:hover > .wiggle-on-hover {
 .scroll-reveal-stagger.in-view > *:nth-child(3) { transition-delay: 360ms; }
 .scroll-reveal-stagger.in-view > *:nth-child(4) { transition-delay: 500ms; }
 
+/* ---------- Stakeholder carousel — infinite marquee ---------- */
+
+/* Outer: clips overflow, fades edges with a mask */
+.carousel-outer {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 7%, black 93%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, black 7%, black 93%, transparent 100%);
+  padding-bottom: 1.5rem; /* room for card shadow */
+}
+
+/* Inner animated track — rendered twice for seamless loop */
+@keyframes carousel-marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.carousel-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: carousel-marquee 40s linear infinite;
+}
+.carousel-marquee-track:hover {
+  animation-play-state: paused;
+}
+
 /* Recording overlay entrance */
 @keyframes overlay-in {
   from { opacity: 0; }
@@ -722,6 +765,9 @@ a:hover > .wiggle-on-hover {
   }
   .stamp-beacon { animation: none !important; opacity: 0; }
   .bounce-hint  { animation: none !important; }
+  .carousel-marquee-track { animation: none !important; }
+  body          { animation: none !important; }
+  body::before  { animation: none !important; }
 }
 
 ::selection {
@@ -810,4 +856,78 @@ a:hover > .wiggle-on-hover {
 }
 .record-pulse {
   animation: record-pulse 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ── FieldMap (Singapore "vibered" places) ── */
+
+/* CSS transform replaces SVG attr transform — translate must be re-stated
+   inside the keyframe; `translate → rotate` order rotates around the group's
+   local origin (the compass centre). */
+@keyframes compass-spin {
+  from { transform: translate(720px, 80px) rotate(0deg); }
+  to   { transform: translate(720px, 80px) rotate(360deg); }
+}
+.compass-spin {
+  animation: compass-spin 140s linear infinite;
+}
+
+/* Pin: starts hidden above target, drops in with overshoot when section enters viewport */
+.pin-drop {
+  opacity: 0;
+  transform: translate(-50%, -200%) scale(0.4);
+  cursor: pointer;
+}
+.in-view .pin-drop {
+  animation: pin-drop 1100ms cubic-bezier(.34, 1.56, .64, 1) var(--pin-delay, 0ms) both;
+}
+@keyframes pin-drop {
+  0%   { transform: translate(-50%, -200%) scale(0.4); opacity: 0; }
+  60%  { transform: translate(-50%, -42%)  scale(1.12); opacity: 1; }
+  100% { transform: translate(-50%, -50%)  scale(1);    opacity: 1; }
+}
+
+/* Hover: the inner dot scales subtly */
+.pin-dot {
+  transition: transform 200ms cubic-bezier(.16,1,.3,1);
+}
+.pin-drop:hover .pin-dot {
+  transform: scale(1.3);
+}
+
+/* Pulsing ring beneath the pin dot — kicks in after the drop completes */
+@keyframes pin-pulse {
+  0%   { transform: translate(-50%, -50%) scale(0.6); opacity: 0.7; }
+  70%  { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+}
+.pin-pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-stamp);
+  pointer-events: none;
+  opacity: 0;
+}
+.in-view .pin-pulse {
+  animation: pin-pulse 2.6s ease-out calc(var(--pin-delay, 0ms) + 1100ms) infinite;
+}
+
+/* Expedition trail fade-in (after all pins have dropped) */
+@keyframes trail-fade {
+  to { opacity: 0.55; }
+}
+.in-view .trail-fade {
+  animation: trail-fade 900ms ease-out 1700ms forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compass-spin { animation: none !important; }
+  .in-view .pin-drop,
+  .in-view .pin-pulse,
+  .in-view .trail-fade { animation: none !important; }
+  .pin-drop  { opacity: 1; transform: translate(-50%, -50%); }
+  .trail-fade { opacity: 0.55 !important; }
 }

@@ -3,6 +3,9 @@ import { VibeInput } from "@/components/VibeInput";
 import { Polaroid } from "@/components/Polaroid";
 import { MobileActionBar } from "@/components/MobileActionBar";
 import { ScrollReveal } from "@/components/ScrollReveal";
+import { StakeholderCarousel } from "@/components/StakeholderCarousel";
+import { MobileHeroPolaroid } from "@/components/MobileHeroPolaroid";
+import { FieldMap } from "@/components/FieldMap";
 
 const HERO = [
   {
@@ -60,11 +63,20 @@ export default function Home() {
             </h1>
 
             <p
-              className="display-md mt-7 md:mt-10 max-w-[28ch] text-[var(--color-ink-soft)] reveal-body text-[19px] md:text-[24px] leading-[1.45]"
-              style={{ animationDelay: "560ms" }}
-            >
-              Record 15 seconds of a space you love. Viber reads its colors, sounds, and music. Viber finds nearby cafés that with the same vibes.
-            </p>
+  className="display-md mt-7 md:mt-10 max-w-[40ch] text-[var(--color-ink-soft)] reveal-body text-[19px] md:text-[24px] leading-[1.45]"
+  style={{ animationDelay: "560ms" }}
+>
+  <span className="block mb-4">
+    Record <mark className="bg-[#B03A2E]/15 text-inherit px-0.5 rounded-sm">15 seconds</mark> in a space you love.
+  </span>
+  <span className="block mb-4">
+    Viber listens to the <mark className="bg-[#B03A2E]/15 text-inherit px-0.5 rounded-sm">hush, the hum, the hidden music</mark> in the air, and watches the <mark className="bg-[#B03A2E]/15 text-inherit px-0.5 rounded-sm">colors that wrap the room</mark>.
+  </span>
+  <span className="block">
+    From that tiny moment, it weaves a <mark className="bg-[#B03A2E]/15 text-inherit px-0.5 rounded-sm">living video</mark> and an <mark className="bg-[#B03A2E]/15 text-inherit px-0.5 rounded-sm">ambient soundtrack</mark> that feels just like being there.
+  </span>
+</p>
+
 
             {/* Pencil annotation — desktop only */}
             <div className="hidden lg:block absolute top-[12rem] right-[-2rem] reveal reveal-5">
@@ -79,7 +91,17 @@ export default function Home() {
 
           {/* Right: polaroid stack */}
           <div className="col-span-12 lg:col-span-5">
-            <div className="relative h-[380px] md:h-[520px] reveal reveal-4">
+            {/* Mobile: auto-cycling deck — contained, no overflow bleed */}
+            <div className="md:hidden reveal reveal-4">
+              <MobileHeroPolaroid
+                items={HERO.map((h, i) => ({
+                  ...h,
+                  tape: (["tlr", "top", "tl"] as const)[i],
+                }))}
+              />
+            </div>
+            {/* md+: floating stacked polaroids */}
+            <div className="hidden md:block relative h-[520px] reveal reveal-4">
               <div className="absolute" style={{ top: 0, left: "0%" }}>
                 <Polaroid {...HERO[0]} priority tape="tlr" float="a" />
               </div>
@@ -108,6 +130,30 @@ export default function Home() {
           </ScrollReveal>
         </section>
 
+        {/* ── Field Map — Singapore places that have been "vibered" ── */}
+        <ScrollReveal as="section" className="mt-24 md:mt-36" rootMargin="0px 0px -5% 0px">
+          <div className="flex items-baseline gap-4 mb-3">
+            <p className="caption">the field, mapped</p>
+            <span className="flex-1 border-t border-dotted border-[var(--color-rule-soft)]" />
+            <span className="caption text-[var(--color-ink-faint)] tabular-nums">03 vibes · sg</span>
+          </div>
+          <p className="display-italic text-[22px] md:text-[28px] text-[var(--color-ink-soft)] mb-8 max-w-[42ch] leading-tight">
+            places, already sensed.
+            <span className="text-[var(--color-ink-faint)]"> tap a pin to revisit a vibe.</span>
+          </p>
+          <FieldMap />
+        </ScrollReveal>
+
+        {/* ── Field Dispatches — stakeholder carousel ── */}
+        <ScrollReveal as="section" className="mt-24 md:mt-36" rootMargin="0px">
+          <div className="flex items-center gap-4 mb-10">
+            <p className="caption">from the field</p>
+            <span className="flex-1 border-t border-dotted border-[var(--color-rule-soft)]" />
+            <span className="caption text-[var(--color-ink-faint)]">field dispatches</span>
+          </div>
+          <StakeholderCarousel />
+        </ScrollReveal>
+
         <Footer />
       </main>
     </>
@@ -117,7 +163,7 @@ export default function Home() {
 function Header() {
   return (
     <div className="pt-6">
-      <div className="border-t-2 border-[var(--color-ink)] flex items-center justify-between pt-2 pb-3">
+      <div className="border-t-2 border-[var(--color-ink)] flex items-center justify-between pt-2 pb-3 reveal reveal-1">
         <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-[var(--color-ink-mute)]">
           field guide
         </span>
@@ -126,10 +172,10 @@ function Header() {
         </span>
       </div>
       <header className="flex items-baseline justify-between border-b border-[var(--color-rule)] pb-4 md:pb-5">
-        <Link href="/" className="display-italic text-[30px] md:text-[32px] tracking-tight">
+        <Link href="/" className="display-italic text-[30px] md:text-[32px] tracking-tight reveal reveal-2">
           viber<span className="text-[var(--color-stamp)]">.</span>
         </Link>
-        <div className="flex items-baseline gap-4 md:gap-5 caption">
+        <div className="flex items-baseline gap-4 md:gap-5 caption reveal reveal-3">
           <Link href="/archive" className="link-underline">archive</Link>
           <span className="hidden sm:inline">·</span>
           <Link href="/lab" className="link-underline hidden sm:inline">field lab</Link>

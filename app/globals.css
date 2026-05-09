@@ -857,3 +857,77 @@ a:hover > .wiggle-on-hover {
 .record-pulse {
   animation: record-pulse 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* ── FieldMap (Singapore "vibered" places) ── */
+
+/* CSS transform replaces SVG attr transform — translate must be re-stated
+   inside the keyframe; `translate → rotate` order rotates around the group's
+   local origin (the compass centre). */
+@keyframes compass-spin {
+  from { transform: translate(720px, 80px) rotate(0deg); }
+  to   { transform: translate(720px, 80px) rotate(360deg); }
+}
+.compass-spin {
+  animation: compass-spin 140s linear infinite;
+}
+
+/* Pin: starts hidden above target, drops in with overshoot when section enters viewport */
+.pin-drop {
+  opacity: 0;
+  transform: translate(-50%, -200%) scale(0.4);
+  cursor: pointer;
+}
+.in-view .pin-drop {
+  animation: pin-drop 1100ms cubic-bezier(.34, 1.56, .64, 1) var(--pin-delay, 0ms) both;
+}
+@keyframes pin-drop {
+  0%   { transform: translate(-50%, -200%) scale(0.4); opacity: 0; }
+  60%  { transform: translate(-50%, -42%)  scale(1.12); opacity: 1; }
+  100% { transform: translate(-50%, -50%)  scale(1);    opacity: 1; }
+}
+
+/* Hover: the inner dot scales subtly */
+.pin-dot {
+  transition: transform 200ms cubic-bezier(.16,1,.3,1);
+}
+.pin-drop:hover .pin-dot {
+  transform: scale(1.3);
+}
+
+/* Pulsing ring beneath the pin dot — kicks in after the drop completes */
+@keyframes pin-pulse {
+  0%   { transform: translate(-50%, -50%) scale(0.6); opacity: 0.7; }
+  70%  { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+}
+.pin-pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-stamp);
+  pointer-events: none;
+  opacity: 0;
+}
+.in-view .pin-pulse {
+  animation: pin-pulse 2.6s ease-out calc(var(--pin-delay, 0ms) + 1100ms) infinite;
+}
+
+/* Expedition trail fade-in (after all pins have dropped) */
+@keyframes trail-fade {
+  to { opacity: 0.55; }
+}
+.in-view .trail-fade {
+  animation: trail-fade 900ms ease-out 1700ms forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compass-spin { animation: none !important; }
+  .in-view .pin-drop,
+  .in-view .pin-pulse,
+  .in-view .trail-fade { animation: none !important; }
+  .pin-drop  { opacity: 1; transform: translate(-50%, -50%); }
+  .trail-fade { opacity: 0.55 !important; }
+}
